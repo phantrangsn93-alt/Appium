@@ -1,0 +1,18 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<suite name="BSC Regression" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+        <listener class-name="vn.bsc.automation.listeners.RetryTransformer"/>
+    </listeners>
+    <test name="Android - Regression" preserve-order="true">
+        <groups><run><include name="regression"/></run></groups>
+        <classes>
+            <class name="vn.bsc.automation.tests.login.LoginTest"/>
+            <class name="vn.bsc.automation.tests.navigation.NavigationTest"/>
+            <class name="vn.bsc.automation.tests.priceboard.PriceBoardTest"/>
+            <class name="vn.bsc.automation.tests.order.OrderFormTest"/>
+            <class name="vn.bsc.automation.tests.order.TradingInfoTest"/>
+            <class name="vn.bsc.automation.tests.search.SearchTest"/>
+        </classes>
+    </test>
+</suite>

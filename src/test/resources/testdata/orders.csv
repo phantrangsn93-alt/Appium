@@ -1,0 +1,27 @@
+﻿# Dữ liệu đặt lệnh (1 dòng = 1 testcase). Mở/sửa bằng Excel, lưu dạng CSV UTF-8.
+# enabled=false: bỏ qua dòng. Dòng bắt đầu bằng # là ghi chú.
+# orderType: LO | ODDLOT (lô lẻ, KL<100) | ATO | ATC | MTL | MOK | MAK | PLO | MARKET (UPCOM: giá = trần)
+#   HOSE: ATO ATC MTL   |   HNX: ATC MTL MOK MAK PLO   |   UPCOM: MARKET   |   lô lẻ: ODDLOT (giá LO)
+# price (chỉ LO/ODDLOT): REF | CEIL | FLOOR | số (x1000)
+# session (phiên hợp lệ): ATO | CONTINUOUS | ATC | PLO | TRADING | ANY  - nhiều phiên cách nhau bằng |
+# outOfSession (kỳ vọng khi ĐẶT SAI PHIÊN): REJECT (hệ thống báo lỗi => PASS) | ACCEPT | ANY
+id,enabled,excelNo,description,subAccount,side,exchange,symbol,orderType,price,quantity,session,outOfSession
+EX02_LO,true,2,Đặt lệnh LO - TK thường,Thường_BSC,BUY,HOSE,AAA,LO,REF,100,TRADING,ANY
+EX03_ATO,true,3,Đặt lệnh ATO,Thường_BSC,BUY,HOSE,AAA,ATO,,100,ATO,REJECT
+EX04_MTL,true,4,Đặt lệnh MTL,Thường_BSC,BUY,HOSE,AAA,MTL,,100,CONTINUOUS,REJECT
+EX05_ATC,true,5,Đặt lệnh ATC,Thường_BSC,BUY,HOSE,AAA,ATC,,100,ATC,REJECT
+ODD_HOSE,true,,Lô lẻ HOSE (mua 10 CP giá TC),Thường_BSC,BUY,HOSE,AAA,ODDLOT,REF,10,CONTINUOUS,REJECT
+ODD_HNX,false,,Lô lẻ HNX,Thường_BSC,BUY,HNX,TNG,ODDLOT,REF,10,CONTINUOUS,REJECT
+ODD_UPCOM,false,,Lô lẻ UPCOM,Thường_BSC,BUY,UPCOM,ACV,ODDLOT,REF,10,CONTINUOUS,REJECT
+HNX_MOK,false,,HNX lệnh MOK,Thường_BSC,BUY,HNX,TNG,MOK,,100,CONTINUOUS,REJECT
+HNX_MAK,false,,HNX lệnh MAK,Thường_BSC,BUY,HNX,TNG,MAK,,100,CONTINUOUS,REJECT
+HNX_MTL,false,,HNX lệnh MTL,Thường_BSC,BUY,HNX,TNG,MTL,,100,CONTINUOUS,REJECT
+HNX_ATC,false,,HNX lệnh ATC,Thường_BSC,BUY,HNX,TNG,ATC,,100,ATC,REJECT
+HNX_PLO,false,,HNX lệnh PLO,Thường_BSC,BUY,HNX,TNG,PLO,,100,PLO,REJECT
+UPCOM_MKT,false,,UPCOM lệnh thị trường (giá trần),Thường_BSC,BUY,UPCOM,ACV,MARKET,,100,CONTINUOUS,REJECT
+SELL_LO,false,,Bán LO (cần có CP trong tiểu khoản),Thường_BSC,SELL,HOSE,AAA,LO,REF,100,TRADING,ANY
+SELL_ODD,false,,Bán lô lẻ,Thường_BSC,SELL,HOSE,AAA,ODDLOT,REF,10,CONTINUOUS,REJECT
+PS_LO,false,,Phái sinh LO (tiểu khoản Phaisinh),Phaisinh,BUY,DERIVATIVE,41I1GB000,LO,REF,1,TRADING,ANY
+PS_ATO,false,,Phái sinh ATO,Phaisinh,BUY,DERIVATIVE,41I1GB000,ATO,,1,ATO,REJECT
+PS_ATC,false,,Phái sinh ATC,Phaisinh,BUY,DERIVATIVE,41I1GB000,ATC,,1,ATC,REJECT
+PS_MTL,false,,Phái sinh MTL,Phaisinh,SELL,DERIVATIVE,41I1GB000,MTL,,1,CONTINUOUS,REJECT

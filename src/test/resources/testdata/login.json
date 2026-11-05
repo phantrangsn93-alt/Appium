@@ -1,0 +1,27 @@
+{
+  "_comment": "Negative login data. Never put real passwords here - valid account comes from .env. Use NON-EXISTENT usernames for wrong-credential cases to avoid locking a real account.",
+  "invalidLogins": [
+    {
+      "id": "TC_LOGIN_02",
+      "title": "Bỏ trống tài khoản và mật khẩu",
+      "username": "",
+      "password": "",
+      "expectedMessage": "Không để trống trường tài khoản và mật khẩu"
+    },
+    {
+      "id": "TC_LOGIN_03",
+      "title": "Bỏ trống mật khẩu",
+      "username": "000C000001",
+      "password": "",
+      "expectedMessage": "Không để trống trường mật khẩu"
+    },
+    {
+      "id": "TC_LOGIN_04",
+      "title": "Tài khoản không tồn tại",
+      "username": "000C000001",
+      "password": "Wrong@12345",
+      "expectedMessage": null,
+      "_note": "App currently answers \"Mã sự kiện không tồn tại\" (+ event code) - confirm the expected business message with BA before asserting it."
+    }
+  ]
+}

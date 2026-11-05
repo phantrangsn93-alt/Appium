@@ -1,0 +1,21 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Smoke: fast checks on every new build. Order: login suite first (it leaves the app logged in). -->
+<suite name="BSC Smoke" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+        <listener class-name="vn.bsc.automation.listeners.RetryTransformer"/>
+    </listeners>
+    <test name="Android - Smoke" preserve-order="true">
+        <!-- Optional per-device params (needed for parallel runs):
+        <parameter name="udid" value="dabfffa4"/>
+        <parameter name="systemPort" value="8200"/> -->
+        <groups><run><include name="smoke"/></run></groups>
+        <classes>
+            <class name="vn.bsc.automation.tests.login.LoginTest"/>
+            <class name="vn.bsc.automation.tests.navigation.NavigationTest"/>
+            <class name="vn.bsc.automation.tests.priceboard.PriceBoardTest"/>
+            <class name="vn.bsc.automation.tests.order.OrderFormTest"/>
+            <class name="vn.bsc.automation.tests.search.SearchTest"/>
+        </classes>
+    </test>
+</suite>

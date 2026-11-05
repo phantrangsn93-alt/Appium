@@ -1,0 +1,10 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Framework unit tests: no device / Appium needed. -->
+<suite name="Framework unit" parallel="classes" thread-count="2">
+    <test name="unit">
+        <classes>
+            <class name="vn.bsc.automation.unit.LocatorsTest"/>
+            <class name="vn.bsc.automation.unit.OrderDataTest"/>
+        </classes>
+    </test>
+</suite>

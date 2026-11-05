@@ -1,0 +1,6 @@
+{
+  "stocks": [
+    { "keyword": "BSI", "symbol": "BSI", "companyContains": "Chứng khoán BIDV" },
+    { "keyword": "AAA", "symbol": "AAA", "companyContains": "An Phát" }
+  ]
+}

@@ -1,0 +1,7 @@
+﻿# Thao tác trên lệnh đã đặt (theo id trong orders.csv). Chạy SAU khi đặt lệnh, theo thứ tự dòng.
+# action: MODIFY | CANCEL | CANCEL_ALL     priceSteps (MODIFY): số lần bấm + (âm = bấm -)
+# CANCEL_ALL chỉ huỷ khi MỌI lệnh chờ đều do test tạo; nếu có lệnh khác => dừng an toàn (FAIL), không huỷ.
+id,enabled,excelNo,description,action,targetId,priceSteps
+EX06_MODIFY,true,6,Sửa lệnh LO: giá + 1 bước,MODIFY,EX02_LO,1
+EX07_CANCEL,true,7,Huỷ lệnh ATC,CANCEL,EX05_ATC,
+EX08_CANCEL_ALL,true,8,Huỷ tất cả (chỉ lệnh do test tạo),CANCEL_ALL,,
