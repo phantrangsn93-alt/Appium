@@ -11,7 +11,9 @@
             <class name="vn.bsc.automation.tests.priceboard.PriceBoardTest"/>
             <class name="vn.bsc.automation.tests.order.OrderFormTest"/>
             <class name="vn.bsc.automation.tests.order.TradingInfoTest"/>
+            <class name="vn.bsc.automation.tests.order.ConditionalOrderFormTest"/>
             <class name="vn.bsc.automation.tests.search.SearchTest"/>
+            <class name="vn.bsc.automation.tests.search.StockDetailTest"/>
         </classes>
     </test>
 </suite>

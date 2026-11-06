@@ -1,5 +1,5 @@
 {
-  "_comment": "Symbols used for order-form tests (form only, never submitted). subAccount: stock sub-account selected before each test (tests must not depend on the sub-account left by a previous suite).",
+  "_comment": "Symbols used for order-form tests (form only, never submitted). subAccount: sub-account TYPE (CO_SO | MARGIN | PHAI_SINH, real name in config) selected before each test (tests must not depend on the sub-account left by a previous suite).",
   "symbols": [
     {
       "symbol": "AAA",
@@ -16,5 +16,5 @@
   ],
   "lotSize": 100,
   "zeroQuantityMessage": "Số lượng không thể bỏ trống hoặc phải lớn hơn 0",
-  "subAccount": "Thường_BSC"
+  "subAccount": "CO_SO"
 }

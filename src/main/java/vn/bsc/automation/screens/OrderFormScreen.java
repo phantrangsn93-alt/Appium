@@ -71,21 +71,37 @@ public class OrderFormScreen extends BaseScreen {
 
     /** The 3 nodes [minus, value, plus] of a stepper row, from one page-source snapshot. */
     private List<UiNode> stepperRow(Row row) {
-        List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
-        int pctTop = nodes.stream().filter(n -> "25%".equals(n.desc()))
-                .mapToInt(UiNode::y).findFirst().orElseThrow(() -> new AssertionError("Order form rows not visible (25% button)"));
-        // stepper rows = value nodes above "25%" that have a description-less [-] and [+] on the same line
-        List<List<UiNode>> rows = nodes.stream()
-                .filter(n -> n.clickable() && n.y() < pctTop && VALUE.matcher(n.desc()).matches())
-                .sorted(Comparator.comparingInt(UiNode::y).reversed())
-                .map(v -> rowAround(nodes, v))
-                .filter(r -> r != null)
-                .collect(Collectors.toList());
-        int idx = row == Row.QUANTITY ? 0 : 1;
-        if (rows.size() <= idx) {
-            throw new AssertionError(row == Row.PRICE ? "Price stepper not shown (Market order type?)" : "Quantity stepper not found");
+        return stepperRowFromBottom(row == Row.QUANTITY ? 0 : 1,
+                row == Row.PRICE ? "Price stepper not shown (Market order type?)" : "Quantity stepper not found");
+    }
+
+    /**
+     * Stepper rows [minus, value, plus] counted from the bottom (0 = quantity, the row right above "25%").
+     * Conditional forms have more rows (OCO: 4) and push "25%" below the fold -> scrolls down until it is visible.
+     */
+    private List<UiNode> stepperRowFromBottom(int idx, String notFound) {
+        // small scrolls (15% of the window): a big scroll pushes the top rows (OCO: Giá đặt LO) out of view
+        for (int attempt = 0; attempt < 6; attempt++) {
+            List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+            java.util.OptionalInt pct = nodes.stream().filter(n -> "25%".equals(n.desc())).mapToInt(UiNode::y).findFirst();
+            if (pct.isEmpty()) {
+                GestureUtils.scrollBy(0.15);
+                continue;
+            }
+            int pctTop = pct.getAsInt();
+            // stepper rows = value nodes above "25%" that have a description-less [-] and [+] on the same line
+            List<List<UiNode>> rows = nodes.stream()
+                    .filter(n -> n.clickable() && n.y() < pctTop && VALUE.matcher(n.desc()).matches())
+                    .sorted(Comparator.comparingInt(UiNode::y).reversed())
+                    .map(v -> rowAround(nodes, v))
+                    .filter(r -> r != null)
+                    .collect(Collectors.toList());
+            if (rows.size() > idx) {
+                return rows.get(idx);
+            }
+            GestureUtils.scrollBy(-0.1); // the top rows scrolled out of view: back up a little ("25%" stays visible)
         }
-        return rows.get(idx);
+        throw new AssertionError(notFound + " (or '25%' button not visible)");
     }
 
     /** [minus, value, plus] when the value has +/- buttons on its line, else null. */
@@ -286,15 +302,171 @@ public class OrderFormScreen extends BaseScreen {
         return isVisible(Locators.a11y(type.label()));
     }
 
-    /** index 0 = "Trong ngày", 1 = "Nhiều ngày" */
+    /**
+     * "Điều kiện" order types (dropdown "Kiểu lệnh", bottom sheet of Buttons + "Đóng"). Fields per type
+     * (surveyed 06/11/2026, hints are for BUY / SELL, x = reference price):
+     * <pre>
+     * STOP_LIMIT     Giá kích hoạt (&gt; x / &lt; x), Giá đặt, Khối lượng
+     * TRAILING_STOP  Biên độ (≤ ...), Bước giá, Khối lượng
+     * OCO            LO: Giá đặt (≤ x / ≥ x) + Stop Limit: Giá kích hoạt (&gt; x / &lt; x), Giá đặt; Khối lượng
+     * </pre>
+     * All types: Hiệu lực Trong ngày / Nhiều ngày + "Đến ngày".
+     */
+    public enum ConditionalType {
+        STOP_LIMIT("Stop Limit"), TRAILING_STOP("Trailing Stop"), OCO("OCO");
+
+        private final String label;
+
+        ConditionalType(String label) {
+            this.label = label;
+        }
+
+        public String label() {
+            return label;
+        }
+    }
+
+    private static final By CONDITIONAL_TYPE = Locators.descMatchesAny("Stop Limit", "Trailing Stop", "OCO");
+
+    @Step("Chọn lệnh điều kiện: {type}")
+    public OrderFormScreen selectConditionalType(ConditionalType type) {
+        selectOrderType(OrderType.CONDITIONAL);
+        if (!type.label().equals(getConditionalType())) {
+            tap(CONDITIONAL_TYPE);
+            By option = Locators.classWithDesc("android.widget.Button", type.label());
+            tap(option);
+            WaitUtils.waitInvisible(option, Duration.ofSeconds(5));
+            if (!WaitUtils.condition(() -> type.label().equals(getConditionalType()), Duration.ofSeconds(5))) {
+                throw new AssertionError("Không chọn được kiểu lệnh điều kiện " + type.label());
+            }
+        }
+        return this;
+    }
+
+    /** Current "Kiểu lệnh" of a conditional order (Stop Limit / Trailing Stop / OCO). */
+    public String getConditionalType() {
+        return getDesc(CONDITIONAL_TYPE);
+    }
+
+    /**
+     * Value fields of a conditional order. Each is a stepper row [- value +] without its own label; position
+     * counted from the bottom of the stepper block (0 = Khối lượng), surveyed 06/11/2026:
+     * <pre>
+     * STOP_LIMIT     2 Giá kích hoạt   1 Giá đặt (auto-filled by the app after the trigger, e.g. 8.03 -&gt; 8.13)
+     * TRAILING_STOP  2 Biên độ         1 Bước giá
+     * OCO            3 Giá đặt (LO)    2 Giá kích hoạt   1 Giá đặt (Stop Limit)
+     * </pre>
+     */
+    public enum CondField {
+        TRIGGER, ORDER_PRICE, AMPLITUDE, PRICE_STEP, LO_PRICE;
+
+        int rowFromBottom(ConditionalType type) {
+            return switch (type) {
+                case STOP_LIMIT -> switch (this) {
+                    case TRIGGER -> 2;
+                    case ORDER_PRICE -> 1;
+                    default -> throw new IllegalArgumentException(this + " not in Stop Limit");
+                };
+                case TRAILING_STOP -> switch (this) {
+                    case AMPLITUDE -> 2;
+                    case PRICE_STEP -> 1;
+                    default -> throw new IllegalArgumentException(this + " not in Trailing Stop");
+                };
+                case OCO -> switch (this) {
+                    case LO_PRICE -> 3;
+                    case TRIGGER -> 2;
+                    case ORDER_PRICE -> 1;
+                    default -> throw new IllegalArgumentException(this + " not in OCO");
+                };
+            };
+        }
+    }
+
+    private ConditionalType currentConditionalType() {
+        String label = getConditionalType();
+        return java.util.Arrays.stream(ConditionalType.values()).filter(t -> t.label().equals(label)).findFirst()
+                .orElseThrow(() -> new AssertionError("Not a conditional order: " + label));
+    }
+
+    public BigDecimal getConditional(CondField field) {
+        int row = field.rowFromBottom(currentConditionalType());
+        return NumberUtils.parse(stepperRowFromBottom(row, field + " row not found").get(1).desc());
+    }
+
+    /** Types a value (x1000, e.g. "8.03") into a conditional-order field with the app keypad. */
+    @Step("Lệnh điều kiện - nhập {field}: {value}")
+    public OrderFormScreen enterConditional(CondField field, String value) {
+        int row = field.rowFromBottom(currentConditionalType());
+        tapNode(stepperRowFromBottom(row, field + " row not found").get(1));
+        NumericKeypad keypad = new NumericKeypad().waitUntilLoaded();
+        keypad.enter(value);
+        BigDecimal want = new BigDecimal(value);
+        if (!WaitUtils.condition(() -> safe(() -> getConditional(field).compareTo(want) == 0), Duration.ofSeconds(5))) {
+            throw new AssertionError(field + " trên form khác giá trị đã nhập " + value);
+        }
+        return this;
+    }
+
+    /**
+     * Suggested value shown under a field label in the form, e.g. hint("Giá kích hoạt", 0) -&gt; 7.53 for "&gt; 7.53".
+     * {@code occurrence} distinguishes repeated labels (OCO: "Giá đặt" #0 = LO leg, #1 = Stop Limit leg).
+     * Returns null when the label has no numeric hint.
+     */
+    public BigDecimal hint(String label, int occurrence) {
+        String want = Locators.nfc(label);
+        String container = UiNode.snapshot(driver().getPageSource()).stream()
+                .map(UiNode::desc).filter(d -> d.contains("Hiệu lực") && d.contains("Khối lượng"))
+                .findFirst().orElseThrow(() -> new AssertionError("Order form container not found"));
+        String[] lines = container.split("\n");
+        int seen = 0;
+        for (int i = 0; i < lines.length - 1; i++) {
+            if (lines[i].trim().equals(want) && seen++ == occurrence) {
+                String h = lines[i + 1].replaceAll("[^0-9.,]", "");
+                return h.isEmpty() ? null : NumberUtils.parse(h);
+            }
+        }
+        throw new AssertionError("Label not on the form: " + label + " #" + occurrence);
+    }
+
+    private static final Pattern DATE = Pattern.compile("^\\d{2}/\\d{2}/\\d{4}$");
+
+    /**
+     * "Đến ngày" of a multi-day / conditional order (dd/MM/yyyy). Tapping it opens a date picker
+     * (3 SeekBars day/month/year + "Huỷ bỏ" / "Đồng ý"). WARNING (06/11/2026): changing the sub-account while the
+     * picker is open leaves it stuck on screen (neither button works) - only an app restart clears it.
+     */
+    public String getExpiryDate() {
+        return UiNode.snapshot(driver().getPageSource()).stream()
+                .filter(n -> n.clickable() && DATE.matcher(n.desc()).matches())
+                .map(UiNode::desc).findFirst()
+                .orElseThrow(() -> new AssertionError("'Đến ngày' not shown (validity is not multi-day?)"));
+    }
+
+    /** index 0 = "Trong ngày", 1 = "Nhiều ngày" (RadioButtons without content-desc) */
     public boolean isValidityChecked(int index) {
-        return Boolean.parseBoolean(findAll(validityRadios).get(index).getAttribute("checked"));
+        return Boolean.parseBoolean(validityRadio(index).getAttribute("checked"));
     }
 
     @Step("Chọn hiệu lực index {index}")
     public OrderFormScreen selectValidity(int index) {
-        findAll(validityRadios).get(index).click();
+        org.openqa.selenium.WebElement radio = validityRadio(index);
+        if (!Boolean.parseBoolean(radio.getAttribute("checked"))) {
+            radio.click();
+            WaitUtils.condition(() -> Boolean.parseBoolean(validityRadio(index).getAttribute("checked")), Duration.ofSeconds(3));
+        }
         return this;
+    }
+
+    /** The radios sit below the fold on conditional forms -> scroll them into view first. */
+    private org.openqa.selenium.WebElement validityRadio(int index) {
+        for (int i = 0; i < 4 && findAll(validityRadios).size() <= index; i++) {
+            GestureUtils.scrollBy(0.2);
+        }
+        List<org.openqa.selenium.WebElement> radios = findAll(validityRadios);
+        if (radios.size() <= index) {
+            throw new AssertionError("Hiệu lực radio #" + index + " not found");
+        }
+        return radios.get(index);
     }
 
     // ------------------------------------------------------------------ price / quantity

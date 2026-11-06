@@ -11,6 +11,7 @@ import vn.bsc.automation.core.utils.ManualInput;
 import vn.bsc.automation.core.utils.WaitUtils;
 import vn.bsc.automation.screens.LoginScreen;
 import vn.bsc.automation.screens.MarketScreen;
+import vn.bsc.automation.screens.MenuScreen;
 import vn.bsc.automation.screens.components.AlertDialog;
 import vn.bsc.automation.screens.components.AppHeader;
 import vn.bsc.automation.screens.components.BottomNavBar;
@@ -39,10 +40,12 @@ public class LoginFlow {
     private final LoginScreen loginScreen = new LoginScreen();
     private final BottomNavBar bottomNav = new BottomNavBar();
     private final AlertDialog dialog = new AlertDialog();
+    private final MenuScreen menu = new MenuScreen();
 
     /** Waits (up to app-launch timeout) until a known state is reached. */
     public AppState detectState() {
         AppState[] state = {AppState.UNKNOWN};
+        int[] misses = {0};
         WaitUtils.condition(() -> {
             if (loginScreen.isDisplayed(Duration.ofMillis(300))) {
                 state[0] = AppState.LOGGED_OUT;
@@ -52,8 +55,23 @@ public class LoginFlow {
                 state[0] = WaitUtils.isVisible(GUEST_HEADER, Duration.ofMillis(300)) ? AppState.GUEST : AppState.LOGGED_IN;
                 return true;
             }
-            dismissDialogIfAny();
+            // Full-screen menu left open (e.g. a previous test failed inside it): Back does not close it.
+            if (menu.isDisplayed(Duration.ofMillis(300))) {
+                LOG.info("Menu is open - closing it");
+                menu.close();
+                return false;
+            }
+            if (dialog.isShown(Duration.ofMillis(300))) {
+                dismissDialogIfAny();
+                return false;
+            }
             hideKeyboardSilently();
+            // Still nothing known after a few polls: the app is on a sub-screen (form, history...) left by a
+            // previous test -> go back one level. Only while our app is in front (never Back out of another app).
+            if (++misses[0] % 3 == 0 && isOurAppInFront()) {
+                LOG.info("Unknown screen - pressing Back");
+                DriverManager.getDriver().navigate().back();
+            }
             return false;
         }, AppConfig.appLaunchTimeout());
         LOG.info("Detected app state: {}", state[0]);
@@ -198,6 +216,14 @@ public class LoginFlow {
                 dialog.tapButton(btn);
                 return;
             }
+        }
+    }
+
+    private boolean isOurAppInFront() {
+        try {
+            return AppConfig.appPackage().equals(DriverManager.getDriver().getCurrentPackage());
+        } catch (Exception e) {
+            return false;
         }
     }
 

@@ -40,7 +40,7 @@ public class OrderFormTest extends LoggedInBaseTest {
     @BeforeMethod(alwaysRun = true)
     public void openOrderForm() {
         form = navigator.openTrading().openOrderForm();
-        form.selectSubAccount(DATA.get("subAccount").asText()); // independent of the previous suite's state
+        form.selectSubAccount(vn.bsc.automation.data.SubAccount.resolve(DATA.get("subAccount").asText())); // independent of the previous suite's state
         form.selectBuy();
     }
 

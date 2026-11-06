@@ -50,6 +50,14 @@ public final class OrderRegistry {
         }
     }
 
+    /** After "Sửa lệnh" changed the quantity: the order book row is found by symbol + quantity. */
+    public static void updateQuantity(String id, long newQuantity) {
+        PlacedOrder o = ORDERS.get(id);
+        if (o != null) {
+            ORDERS.put(id, new PlacedOrder(o.source(), o.subAccount(), o.price(), newQuantity, o.placedAt(), o.appMessage()));
+        }
+    }
+
     public static List<PlacedOrder> pending() {
         List<PlacedOrder> out = new ArrayList<>();
         ORDERS.forEach((id, o) -> {

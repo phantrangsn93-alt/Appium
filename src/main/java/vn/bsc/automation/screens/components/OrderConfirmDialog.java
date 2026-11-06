@@ -2,6 +2,7 @@ package vn.bsc.automation.screens.components;
 
 import org.openqa.selenium.By;
 import vn.bsc.automation.core.base.BaseScreen;
+import vn.bsc.automation.core.config.AppConfig;
 import vn.bsc.automation.core.utils.AllureUtils;
 import vn.bsc.automation.core.utils.Locators;
 import vn.bsc.automation.core.utils.ManualInput;
@@ -12,7 +13,8 @@ import java.time.Duration;
 /**
  * Order confirmation dialog (place / modify / cancel): order summary + PIN field + "Xác nhận".
  * <p>
- * The PIN is typed by the TESTER on the phone ({@link ManualInput}); it is never stored or logged.
+ * The PIN comes from BSC_ORDER_PIN in .env (git-ignored) or, if unset, is typed by the TESTER on the phone
+ * ({@link ManualInput}). It is never logged.
  * <p>
  * NOTE: locators for this dialog were derived from the Excel steps ("Nhập Pin", "Chạm vào nút Xác nhận") and
  * could not be verified on the device yet (real orders are blocked during batch). Screenshot + page source
@@ -34,11 +36,25 @@ public class OrderConfirmDialog extends BaseScreen {
     }
 
     /**
-     * Waits for the tester to type the PIN, then taps "Xác nhận" (Excel steps "Nhập Pin" + "Xác nhận").
-     * If the tester taps "Xác nhận" themselves, that is accepted too.
+     * Excel steps "Nhập Pin" + "Xác nhận". With BSC_ORDER_PIN set in .env the PIN is typed automatically;
+     * otherwise waits for the tester to type it on the phone. If the dialog has no PIN field (PIN remembered
+     * for the session) only "Xác nhận" is tapped.
      */
-    public void enterPinManuallyAndConfirm(String context) {
+    public void enterPinAndConfirm(String context) {
         attachEvidence(context);
+        String pin = AppConfig.orderPin();
+        if (pin != null) {
+            if (isVisible(pinField, Duration.ofSeconds(3))) {
+                log.info("Nhập PIN tự động (từ .env) cho: {}", context);
+                type(pinField, pin);
+                hideKeyboard();
+            }
+            if (isDisplayed(Duration.ofSeconds(1))) {
+                tap(confirmButton);
+            }
+            WaitUtils.waitInvisible(confirmButton, Duration.ofSeconds(15));
+            return;
+        }
         ManualInput.waitForUser("Nhập mã PIN trên điện thoại cho: " + context + " (rồi ẩn bàn phím hoặc tự bấm Xác nhận)",
                 () -> !isDisplayed(Duration.ofMillis(300)) || isPinTyped());
         if (isDisplayed(Duration.ofSeconds(1))) {

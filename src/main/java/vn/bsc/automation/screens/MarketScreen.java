@@ -7,8 +7,13 @@ import vn.bsc.automation.core.utils.Locators;
 /** "Thị trường" - home screen after login. */
 public class MarketScreen extends BaseScreen {
 
+    /** Tabs visible without scrolling. A 5th tab "ETFs" exists off-screen (swipe the tab bar left). */
     public static final String[] TABS = {"Tổng quan", "Cổ phiếu", "Phái sinh", "Chứng quyền"};
-    public static final String[] QUICK_ACTIONS = {"Smart OTP", "Mở tài khoản", "Khuyến nghị", "Nộp tiền"};
+    public static final String TAB_ETFS = "ETFs";
+    /** Quick actions visible without scrolling (label "SmartOTP" has no space - UAT.1-master-UAT5). */
+    public static final String[] QUICK_ACTIONS = {"SmartOTP", "Mở tài khoản", "Khuyến nghị", "Nộp tiền"};
+    /** More quick actions after swiping the row left; "Tuỳ chỉnh" opens "Cài đặt chức năng nổi bật". */
+    public static final String[] MORE_QUICK_ACTIONS = {"Lịch sự kiện", "Danh mục", "Đồ thị", "Tuỳ chỉnh"};
 
     @Override
     protected By anchor() {

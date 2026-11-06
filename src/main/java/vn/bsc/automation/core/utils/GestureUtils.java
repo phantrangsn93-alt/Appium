@@ -50,6 +50,14 @@ public final class GestureUtils {
                 Duration.ofMillis(500));
     }
 
+    /** Small scroll: content moves by {@code fraction} of the window height (positive = down, negative = up). */
+    public static void scrollBy(double fraction) {
+        Dimension s = DriverManager.getDriver().manage().window().getSize();
+        int from = (int) (s.height * (fraction > 0 ? 0.65 : 0.35));
+        int to = (int) (from - s.height * fraction);
+        swipe(new Point(s.width / 2, from), new Point(s.width / 2, to), Duration.ofMillis(600));
+    }
+
     public static void scrollUp() {
         Dimension s = DriverManager.getDriver().manage().window().getSize();
         swipe(new Point(s.width / 2, (int) (s.height * 0.30)), new Point(s.width / 2, (int) (s.height * 0.70)),

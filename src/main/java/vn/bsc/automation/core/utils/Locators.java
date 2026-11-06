@@ -82,10 +82,24 @@ public final class Locators {
         return uiSelector("className(\"android.widget.EditText\").instance(" + index + ")");
     }
 
-    /** Converts app text to the canonical form used in assertions. */
-    public static String nfc(String s) {
-        return s == null ? null : Normalizer.normalize(s, Normalizer.Form.NFC);
+    /**
+     * Labelled field whose content-desc is "&lt;label&gt;\n&lt;value&gt;", e.g. "Tiểu khoản chuyển\nThường - 0101042221".
+     * Matches only the exact label: "Tiểu khoản" does not match "Tiểu khoản chuyển" (the character right
+     * after the label must be the line break, not a space).
+     */
+    public static By field(String label) {
+        return descMatches(anyForm(label) + "[^ ].*");
     }
+
+    /**
+     * Converts app text to the canonical form used in assertions: NFC, without zero-width characters
+     * (the app inserts U+200B between every character of sub-account values: "T​h​ư...").
+     */
+    public static String nfc(String s) {
+        return s == null ? null : ZERO_WIDTH.matcher(Normalizer.normalize(s, Normalizer.Form.NFC)).replaceAll("");
+    }
+
+    private static final java.util.regex.Pattern ZERO_WIDTH = java.util.regex.Pattern.compile("[\\u200B\\u200C\\u200D\\uFEFF]");
 
     // ------------------------------------------------------------------ internals
 

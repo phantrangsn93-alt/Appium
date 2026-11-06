@@ -56,6 +56,7 @@ mvn test -Dsuite=testng-regression.xml          # Regression đầy đủ
 mvn test -Dsuite=testng-postlogin.xml           # Chỉ các màn sau đăng nhập (không đăng xuất)
 mvn test -Ddevice.udid=XXXX -Denv=uat           # Ghi đè cấu hình
 mvn test -Dsuite=testng-unit.xml                # Unit test framework (không cần thiết bị)
+mvn test -Dsuite=testng-menu.xml                # Menu phải: mở mọi mục + form giao dịch tiền (chỉ đọc)
 mvn allure:serve                                # Xem báo cáo Allure
 ```
 
@@ -115,6 +116,14 @@ src/test/resources/testdata   login.json, order.json, search.json
 * Test dữ liệu thị trường chỉ kiểm tra **định dạng / quan hệ** (Trần > TC > Sàn), không so giá trị cụ thể.
 * Test sai mật khẩu dùng **tài khoản không tồn tại** để tránh khoá tài khoản thật.
 
+* Khảo sát toàn app (Thị trường, chi tiết mã, Bảng giá, Giao dịch, Tìm kiếm, Thông báo, đăng nhập/phiên, tài khoản &
+  tiểu khoản test, phát hiện cho BA): [docs/locators-app.md](docs/locators-app.md).
+* Locator toàn bộ Menu phải (☰) và các form Giao dịch tiền / Chuyển chứng khoán: xem
+  [docs/locators-menu.md](docs/locators-menu.md) – code: `MenuItem`, `SheetOption`, `MenuScreen.open()`,
+  `ActionSheet`, `MenuTargetScreen`, `TransactionFormScreen`.
+* Giá trị tiểu khoản chứa **zero-width space (U+200B)** giữa từng ký tự → `Locators.nfc()` đã tự loại bỏ;
+  ô "nhãn + giá trị" dùng `Locators.field("Tiểu khoản chuyển")`.
+
 ## 7. Chạy song song nhiều thiết bị
 
 Mỗi `<test>` trong testng.xml khai báo `udid` và `systemPort` riêng, đặt `parallel="tests"` cho `<suite>`:
@@ -131,8 +140,10 @@ Mỗi `<test>` trong testng.xml khai báo `udid` và `systemPort` riêng, đặt
 | Excel | Test | Dữ liệu |
 |---|---|---|
 | No.1 Đăng nhập | `ExcelLoginTest` – Menu → Đăng nhập → TK khác → **người kiểm thử gõ user/pass trên điện thoại** | – |
-| No.2–5 Đặt lệnh LO/ATO/MTL/ATC (+ HNX, UPCOM, lô lẻ, phái sinh, Mua/Bán) | `ExcelOrderTest.placeOrder` (data-driven) | `testdata/orders.csv` |
-| No.6–8 Sửa / Huỷ / Huỷ tất cả | `ExcelOrderTest.orderAction` (data-driven) | `testdata/order_actions.csv` |
+| Tiểu khoản thường: LO lô chẵn, LO lô lẻ (KL 1), ATO, MTL, ATC (+ HNX, UPCOM, phái sinh, Mua/Bán) | `ExcelOrderTest.placeOrder` (data-driven) | `testdata/orders.csv` |
+| LO-GTC (Nhiều ngày) | `ExcelOrderTest.placeOrder` – cột `validity=GTC` | `orders.csv` EX09 |
+| Stop limit / Trailing Stop / OCO – trong ngày & nhiều ngày | `ExcelOrderTest.placeOrder` – `orderType`, `triggerPrice` (`HINT+0.5` = giá gợi ý + 0.5), `amplitude`, `priceStep` | `orders.csv` EX10–EX15 |
+| Sửa lệnh (KL = 200) / Hủy 1 lệnh / Hủy nhiều lệnh | `ExcelOrderTest.orderAction` (data-driven) – cột `newQuantity` | `testdata/order_actions.csv` |
 | Kiểm tra dữ liệu trước khi chạy thật | `OrderDryRunTest` – điền form từng dòng, **không gửi lệnh** | `testdata/orders.csv` |
 
 **Thêm loại lệnh / sàn / mã = thêm 1 dòng CSV, không sửa code.** Mở CSV bằng Excel, lưu "CSV UTF-8".
@@ -182,7 +193,9 @@ An toàn khi đặt lệnh thật:
 | 3 | Chuyển Limit → Market đôi khi ô "Giá" (loại lệnh) để **trống**, không có giá trị mặc định | Framework tự mở dropdown để chọn |
 | 4 | Chuyển Market → Limit thì giá về 0 | Người dùng phải nhập lại giá |
 | 5 | App trộn Unicode NFC/NFD/tổ hợp một phần trong nhãn | Ảnh hưởng accessibility / screen reader |
-| 6 | Phiên đăng nhập hết hạn → app về chế độ khách không báo trước | |
+| 6 | Phiên đăng nhập hết hạn → app về chế độ khách không báo trước | 06/11/2026: hết phiên 2 lần trong ngày |
+| 7 | Mua từ chi tiết mã: form Đặt lệnh hiện Trần/TC/Sàn khác chi tiết mã (TLD 8.66/8.10/7.54 vs 8.45/7.90/7.35) và tự đổi tiểu khoản | Chi tiết xem docs/locators-app.md §10 |
+| 8 | Thông báo còn biến mẫu `[Customer name]` chưa thay | |
 
 Kiểm chứng trên thiết bị (Mi MIX 2S, 05/11/2026): dry-run 19/19 dòng orders.csv (HOSE/HNX/UPCOM, ATO/ATC/MTL/MOK/MAK/PLO,
 Market UPCOM, lô lẻ 3 sàn, Bán, phái sinh) PASS; OrderFormTest 10/10; unit test 5/5.

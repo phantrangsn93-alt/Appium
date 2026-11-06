@@ -56,6 +56,11 @@ public final class AppConfig {
         return ConfigReader.getRequired("bsc.password");
     }
 
+    /** Order PIN (BSC_ORDER_PIN in .env). Null = tester types the PIN on the phone. Never log it. */
+    public static String orderPin() {
+        return ConfigReader.get("bsc.order.pin");
+    }
+
     public static boolean hasCredentials() {
         return ConfigReader.get("bsc.username") != null && ConfigReader.get("bsc.password") != null;
     }

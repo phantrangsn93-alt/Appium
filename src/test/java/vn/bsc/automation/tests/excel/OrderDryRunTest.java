@@ -34,8 +34,12 @@ public class OrderDryRunTest extends LoggedInBaseTest {
     public Object[][] orders() {
         // -Ddryrun.includeDisabled=true also checks rows disabled for real runs (validate new data safely)
         boolean all = vn.bsc.automation.core.config.ConfigReader.getBool("dryrun.includeDisabled", false);
+        // -Ddryrun.ids=EX02_LO,PS_LO checks only these rows (enabled or not)
+        String ids = vn.bsc.automation.core.config.ConfigReader.get("dryrun.ids", "");
+        java.util.Set<String> only = ids.isBlank() ? java.util.Set.of() : java.util.Set.of(ids.split("\\s*,\\s*"));
         return OrderCase.load("testdata/orders.csv").stream()
-                .filter(c -> all || c.enabled()).map(c -> new Object[]{c}).toArray(Object[][]::new);
+                .filter(c -> only.isEmpty() ? (all || c.enabled()) : only.contains(c.id()))
+                .map(c -> new Object[]{c}).toArray(Object[][]::new);
     }
 
     @Test(dataProvider = "orders", groups = {"excel", "order", "dry-run"})
@@ -44,16 +48,33 @@ public class OrderDryRunTest extends LoggedInBaseTest {
         FilledForm f = orderFlow.fill(c);
         form = f.form();
         SoftAssertions soft = new SoftAssertions();
-        soft.assertThat(form.getSubAccount()).as("Tiểu khoản").startsWith(Locators.nfc(c.subAccount()) + " - ");
+        soft.assertThat(form.getSubAccount()).as("Tiểu khoản").startsWith(Locators.nfc(c.subAccountName()) + " - ");
         soft.assertThat(form.currentSide()).as("Mua/Bán").isEqualTo(c.side() == OrderCase.Side.BUY ? Side.BUY : Side.SELL);
         soft.assertThat(form.getSelectedStock().symbol()).as("Mã CK").isEqualTo(c.symbol());
         soft.assertThat(form.getSelectedStock().exchange()).as("Sàn").isEqualTo(c.exchange());
-        if (c.isMarketType() && !"MARKET".equals(c.orderType())) {
+        if (c.isConditional()) {
+            OrderFormScreen.ConditionalType t = OrderFormScreen.ConditionalType.valueOf(c.orderType());
+            soft.assertThat(form.getConditionalType()).as("Kiểu lệnh điều kiện").isEqualTo(t.label());
+            switch (t) {
+                case STOP_LIMIT -> soft.assertThat(form.getConditional(OrderFormScreen.CondField.TRIGGER))
+                        .as("Giá kích hoạt").isEqualByComparingTo(f.price());
+                case TRAILING_STOP -> {
+                    soft.assertThat(form.getConditional(OrderFormScreen.CondField.AMPLITUDE))
+                            .as("Biên độ").isEqualByComparingTo(c.amplitude());
+                    soft.assertThat(form.getConditional(OrderFormScreen.CondField.PRICE_STEP))
+                            .as("Bước giá").isEqualByComparingTo(c.priceStep());
+                }
+                case OCO -> soft.assertThat(form.getConditional(OrderFormScreen.CondField.LO_PRICE))
+                        .as("Giá đặt LO").isEqualByComparingTo(f.price());
+            }
+        } else if (c.isMarketType() && !"MARKET".equals(c.orderType())) {
             soft.assertThat(form.getMarketPriceType()).as("Loại lệnh thị trường").isEqualTo(c.orderType());
         } else if (!c.isMarketType()) {
             soft.assertThat(form.getPrice()).as("Giá").isEqualByComparingTo(f.price());
         }
         soft.assertThat(form.getQuantity()).as("Khối lượng").isEqualTo(c.quantity());
+        soft.assertThat(form.isValidityChecked(c.isMultiDay() ? 1 : 0)).as("Hiệu lực " + c.validity()).isTrue();
+        form.scrollToTop();
         soft.assertAll();
     }
 
@@ -67,6 +88,7 @@ public class OrderDryRunTest extends LoggedInBaseTest {
             }
             if (form != null && form.isDisplayed(Duration.ofSeconds(2))) {
                 form.resetQuantity();
+                form.selectValidity(0);
                 form.selectOrderType(OrderFormScreen.OrderType.LIMIT);
             }
         } catch (Exception | AssertionError ignored) {

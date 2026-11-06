@@ -83,7 +83,7 @@ public class ExcelOrderTest extends LoggedInBaseTest {
 
         Outcome out = orderFlow.place(c);
         if (out.success()) {
-            OrderRegistry.register(new PlacedOrder(c, c.subAccount(), out.price(), c.quantity(), LocalDateTime.now(), out.message()));
+            OrderRegistry.register(new PlacedOrder(c, c.subAccountName(), out.price(), c.quantity(), LocalDateTime.now(), out.message()));
         }
         LOG.info("[{}] inSession={} success={} message='{}'", c.id(), inSession, out.success(), out.message());
 
@@ -115,9 +115,12 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         switch (a.action()) {
             case MODIFY -> {
                 PlacedOrder o = target(a);
-                book.modify(o, a.priceSteps(), new OrderFormScreen());
+                book.modify(o, a.priceSteps(), a.newQuantity(), new OrderFormScreen());
                 Outcome out = orderFlow.readResult(o.price());
                 assertThat(out.success()).as("[%s] Sửa lệnh thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
+                if (a.newQuantity() > 0) {
+                    OrderRegistry.updateQuantity(o.source().id(), a.newQuantity()); // later cancel matches the new KL
+                }
             }
             case CANCEL -> {
                 PlacedOrder o = target(a);

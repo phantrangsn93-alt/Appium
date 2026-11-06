@@ -4,6 +4,8 @@ import org.testng.annotations.Test;
 import vn.bsc.automation.core.market.TradingSession;
 import vn.bsc.automation.data.OrderActionCase;
 import vn.bsc.automation.data.OrderCase;
+import vn.bsc.automation.data.PriceSpec;
+import vn.bsc.automation.data.SubAccount;
 
 import java.time.ZonedDateTime;
 import java.util.List;
@@ -49,10 +51,61 @@ public class OrderDataTest {
             if (c.isMarketType() && "HNX".equals(c.exchange())) {
                 assertThat(marketHnx).as(c.id()).contains(c.orderType());
             }
-            if ("DERIVATIVE".equals(c.exchange())) {
-                assertThat(c.subAccount()).as(c.id() + " phái sinh dùng tiểu khoản phái sinh").isEqualTo("Phaisinh");
+            assertThat(SubAccount.typeOf(c.subAccount())).as(c.id() + " subAccount phải là CO_SO | MARGIN | PHAI_SINH").isPresent();
+            boolean derivative = "DERIVATIVE".equals(c.exchange());
+            assertThat(SubAccount.typeOf(c.subAccount()).get() == SubAccount.PHAI_SINH)
+                    .as(c.id() + ": phái sinh <=> tiểu khoản PHAI_SINH").isEqualTo(derivative);
+        }
+    }
+
+    @Test(groups = "unit")
+    public void conditionalRowsHaveTheirFields() {
+        for (OrderCase c : OrderCase.load("testdata/orders.csv")) {
+            if (!c.price().isBlank()) {
+                assertThat(PriceSpec.parse(c.price())).as(c.id() + " price").isNotNull();
+            }
+            switch (c.orderType()) {
+                case "STOP_LIMIT" -> assertThat(PriceSpec.parse(c.triggerPrice())).as(c.id() + " triggerPrice").isNotNull();
+                case "OCO" -> {
+                    assertThat(PriceSpec.parse(c.price())).as(c.id() + " giá LO").isNotNull();
+                    assertThat(PriceSpec.parse(c.triggerPrice())).as(c.id() + " triggerPrice").isNotNull();
+                }
+                case "TRAILING_STOP" -> {
+                    assertThat(new java.math.BigDecimal(c.amplitude())).as(c.id() + " amplitude").isPositive();
+                    assertThat(new java.math.BigDecimal(c.priceStep())).as(c.id() + " priceStep").isPositive();
+                }
+                default -> assertThat(c.isConditional()).isFalse();
             }
         }
+    }
+
+    @Test(groups = "unit")
+    public void priceSpecSyntax() {
+        assertThat(PriceSpec.parse("HINT+0.5").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("8.03");
+        assertThat(PriceSpec.parse("hint - 0.5").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("7.03");
+        assertThat(PriceSpec.parse("REF").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("7.53");
+        assertThat(PriceSpec.parse("7.08").resolve(null)).isEqualByComparingTo("7.08");
+        assertThat(PriceSpec.parse("")).isNull();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> PriceSpec.parse("ABC"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test(groups = "unit")
+    public void modifyActionChangesQuantity() {
+        OrderActionCase m = OrderActionCase.load("testdata/order_actions.csv").stream()
+                .filter(a -> a.action() == OrderActionCase.Action.MODIFY).findFirst().orElseThrow();
+        assertThat(m.newQuantity()).as("Excel: Sửa Khối lượng 200").isEqualTo(200);
+    }
+
+    @Test(groups = "unit")
+    public void subAccountTypeAliases() {
+        assertThat(SubAccount.typeOf("CO_SO")).contains(SubAccount.CO_SO);
+        assertThat(SubAccount.typeOf("Cơ sở")).contains(SubAccount.CO_SO);
+        assertThat(SubAccount.typeOf("margin")).contains(SubAccount.MARGIN);
+        assertThat(SubAccount.typeOf("Phái sinh")).contains(SubAccount.PHAI_SINH);
+        assertThat(SubAccount.typeOf("PHAI_SINH")).contains(SubAccount.PHAI_SINH);
+        assertThat(SubAccount.typeOf("Thường")).isEmpty();
+        assertThat(SubAccount.resolve("Thường")).as("literal name kept").isEqualTo("Thường");
     }
 
     @Test(groups = "unit")

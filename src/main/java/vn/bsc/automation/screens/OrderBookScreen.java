@@ -90,11 +90,20 @@ public class OrderBookScreen extends BaseScreen {
 
     // ------------------------------------------------------------------ actions (Excel No.6 / 7 / 8)
 
-    /** Excel No.6: Sửa -> price "+" x steps -> "Sửa ..." -> Xác nhận (+PIN). */
-    @Step("Sửa lệnh: giá {priceSteps} bước")
-    public void modify(PlacedOrder o, int priceSteps, OrderFormScreen form) {
+    /**
+     * Excel "Sửa lệnh": Sửa -&gt; [price "+" x steps] [Khối lượng = newQuantity] -&gt; "Sửa ..." -&gt; Xác nhận (+PIN).
+     * {@code newQuantity} 0 = keep. The modify form reuses the order-form steppers (not yet verified on a real
+     * order: no order could be placed while surveying).
+     */
+    @Step("Sửa lệnh: giá {priceSteps} bước, KL mới {newQuantity}")
+    public void modify(PlacedOrder o, int priceSteps, long newQuantity, OrderFormScreen form) {
         openRow(o);
         tap(Locators.classWithDesc("android.widget.Button", "Sửa"));
+        AllureUtils.attachScreenshot("Form sửa lệnh " + o.source().id());
+        AllureUtils.attachPageSource("Form sửa lệnh " + o.source().id() + " (page source)");
+        if (newQuantity > 0) {
+            form.enterQuantity(newQuantity);
+        }
         for (int i = 0; i < Math.abs(priceSteps); i++) {
             if (priceSteps > 0) {
                 form.increasePrice();
@@ -104,7 +113,7 @@ public class OrderBookScreen extends BaseScreen {
         }
         tap(Locators.descRegex(Locators.anyForm("Sửa ") + ".+")); // "Sửa mua" / "Sửa bán" (Excel: "Sửa bán")
         new OrderConfirmDialog().waitUntilLoaded();
-        new OrderConfirmDialog().enterPinManuallyAndConfirm("Sửa lệnh " + o.source().id());
+        new OrderConfirmDialog().enterPinAndConfirm("Sửa lệnh " + o.source().id());
     }
 
     /** Excel No.7: Huỷ -> Xác nhận (+PIN). */
@@ -113,7 +122,7 @@ public class OrderBookScreen extends BaseScreen {
         openRow(o);
         tap(Locators.classWithDesc("android.widget.Button", "Huỷ")); // Button, not the "Huỷ" status filter
         new OrderConfirmDialog().waitUntilLoaded();
-        new OrderConfirmDialog().enterPinManuallyAndConfirm("Huỷ lệnh " + o.source().id());
+        new OrderConfirmDialog().enterPinAndConfirm("Huỷ lệnh " + o.source().id());
     }
 
     /**
@@ -139,7 +148,7 @@ public class OrderBookScreen extends BaseScreen {
         tap(cancelAllButton);
         tap(Locators.descRegex(Locators.anyForm("Huỷ ") + "[0-9]+" + Locators.anyForm(" mã"))); // "Huỷ <n> mã"
         new OrderConfirmDialog().waitUntilLoaded();
-        new OrderConfirmDialog().enterPinManuallyAndConfirm("Huỷ tất cả");
+        new OrderConfirmDialog().enterPinAndConfirm("Huỷ tất cả");
     }
 
     private void waitForRows(Duration d) {

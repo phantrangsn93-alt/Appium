@@ -14,16 +14,18 @@ import java.util.stream.Collectors;
  * excelNo     row number in the Excel scenario file
  * action      MODIFY | CANCEL | CANCEL_ALL
  * targetId    id of the order in orders.csv (MODIFY / CANCEL). Empty for CANCEL_ALL.
- * priceSteps  MODIFY only: number of taps on the price "+" (negative = "-")
+ * priceSteps  MODIFY: number of taps on the price "+" (negative = "-"), 0/empty = keep the price
+ * newQuantity MODIFY: new quantity (Excel "Sửa Khối lượng: 200"), 0/empty = keep the quantity
  * </pre>
  */
 public record OrderActionCase(String id, boolean enabled, String excelNo, String description, Action action,
-                              String targetId, int priceSteps) {
+                              String targetId, int priceSteps, long newQuantity) {
 
     public enum Action { MODIFY, CANCEL, CANCEL_ALL }
 
     public static OrderActionCase from(Map<String, String> r) {
         String steps = r.getOrDefault("priceSteps", "");
+        String qty = r.getOrDefault("newQuantity", "");
         return new OrderActionCase(
                 r.get("id"),
                 !"false".equalsIgnoreCase(r.getOrDefault("enabled", "true")),
@@ -31,7 +33,8 @@ public record OrderActionCase(String id, boolean enabled, String excelNo, String
                 r.getOrDefault("description", ""),
                 Action.valueOf(r.get("action").toUpperCase(Locale.ROOT)),
                 r.getOrDefault("targetId", ""),
-                steps.isBlank() ? 0 : Integer.parseInt(steps));
+                steps.isBlank() ? 0 : Integer.parseInt(steps),
+                qty.isBlank() ? 0 : Long.parseLong(qty));
     }
 
     public static List<OrderActionCase> load(String resource) {

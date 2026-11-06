@@ -37,6 +37,14 @@ public class SearchScreen extends BaseScreen {
         return getDesc(stockResult(symbol));
     }
 
+    /** Taps a stock result ("MÃ\n | SÀN\nTên") and returns its detail screen. */
+    @Step("Mở chi tiết mã {symbol}")
+    public StockDetailScreen openStock(String symbol) {
+        hideKeyboard();
+        tap(stockResult(symbol));
+        return new StockDetailScreen().waitUntilLoaded();
+    }
+
     public boolean isCategoryVisible(String category) {
         return isVisible(Locators.a11y(category));
     }

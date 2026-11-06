@@ -1,0 +1,13 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Right-hand menu: every in-app entry + money-transaction bottom sheets/forms (read-only, nothing submitted). -->
+<suite name="BSC Menu" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+        <listener class-name="vn.bsc.automation.listeners.RetryTransformer"/>
+    </listeners>
+    <test name="Android - Menu" preserve-order="true">
+        <classes>
+            <class name="vn.bsc.automation.tests.menu.MenuTest"/>
+        </classes>
+    </test>
+</suite>

@@ -1,0 +1,13 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Order dry run: fills the order form for rows of orders.csv, NOTHING is submitted.
+     mvn test -Dsuite=testng-dryrun.xml [-Ddryrun.includeDisabled=true | -Ddryrun.ids=EX02_LO,MARGIN_LO,PS_LO] -->
+<suite name="BSC Order dry run" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+    </listeners>
+    <test name="Dry run" preserve-order="true">
+        <classes>
+            <class name="vn.bsc.automation.tests.excel.OrderDryRunTest"/>
+        </classes>
+    </test>
+</suite>
