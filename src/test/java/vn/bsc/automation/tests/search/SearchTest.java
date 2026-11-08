@@ -51,4 +51,27 @@ public class SearchTest extends LoggedInBaseTest {
         assertThat(search.isStockResultVisible(symbol)).as("Kết quả " + symbol).isTrue();
         assertThat(search.getStockResultText(symbol)).contains(companyContains);
     }
+
+    @DataProvider(name = "categorySearches")
+    public Object[][] categorySearches() {
+        List<Object[]> rows = new ArrayList<>();
+        for (JsonNode n : TestDataReader.read("market_data.json").get("search")) {
+            rows.add(new Object[]{n.get("category").asText(), n.get("keyword").asText(), n.get("expectContains").asText()});
+        }
+        return rows.toArray(new Object[0][]);
+    }
+
+    @Test(groups = {"regression"}, dataProvider = "categorySearches")
+    @Severity(SeverityLevel.CRITICAL)
+    @Description("TC_SEARCH_03 - Tìm kiếm trong từng nhóm Chứng khoán / Tin tức / Chức năng trả về kết quả đúng (không có kết quả => FAIL)")
+    public void searchEachCategoryReturnsResults(String category, String keyword, String expectContains) {
+        SearchScreen search = navigator.openSearch();
+        search.openCategory(category).searchFresh(keyword);
+        search.openCategory(category); // the list refreshes for the selected category
+        List<String> results = search.results(java.time.Duration.ofSeconds(10));
+        vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Tìm kiếm " + category + " - \"" + keyword + "\"");
+        assertThat(results).as(category + " - \"" + keyword + "\": không có kết quả").isNotEmpty();
+        assertThat(results).as(category + " - kết quả chứa \"" + expectContains + "\"")
+                .anySatisfy(r -> assertThat(r).contains(expectContains));
+    }
 }

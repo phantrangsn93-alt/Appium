@@ -25,6 +25,10 @@ public class MenuTargetScreen extends BaseScreen {
 
     private final String title;
 
+    public String title() {
+        return title;
+    }
+
     public MenuTargetScreen(String title) {
         this.title = title;
     }

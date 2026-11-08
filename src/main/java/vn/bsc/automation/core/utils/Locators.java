@@ -2,6 +2,7 @@ package vn.bsc.automation.core.utils;
 
 import io.appium.java_client.AppiumBy;
 import org.openqa.selenium.By;
+import vn.bsc.automation.core.config.Platform;
 
 import java.text.Normalizer;
 
@@ -17,6 +18,10 @@ import java.text.Normalizer;
  * accented characters the helpers build a regex accepting every canonically-equivalent encoding.
  * <p>
  * Priority: {@link #a11y} (exact) &gt; {@link #descStartsWith} / {@link #descContains} &gt; XPath (last resort).
+ * <p>
+ * <b>iOS (XCUITest):</b> the same Semantics label is exposed as {@code label}; every helper then builds an
+ * {@code -ios predicate string} ({@code label MATCHES "..."}, ICU regex, full match). Class names are Android
+ * <i>roles</i> translated by {@link Platform#iosTypes}; XPath written for Android goes through {@link #xpath}.
  */
 public final class Locators {
 
@@ -25,6 +30,9 @@ public final class Locators {
 
     /** Exact content-desc match (normalization-insensitive). */
     public static By a11y(String desc) {
+        if (Platform.ios()) {
+            return predicate(isPlain(desc) ? "label == " + quote(desc) : "label MATCHES " + quote("(?s)" + anyForm(desc)));
+        }
         if (isPlain(desc)) {
             return AppiumBy.accessibilityId(desc);
         }
@@ -32,6 +40,9 @@ public final class Locators {
     }
 
     public static By descStartsWith(String prefix) {
+        if (Platform.ios() && isPlain(prefix)) {
+            return predicate("label BEGINSWITH " + quote(prefix));
+        }
         if (isPlain(prefix)) {
             return uiSelector("descriptionStartsWith(\"" + escape(prefix) + "\")");
         }
@@ -39,6 +50,9 @@ public final class Locators {
     }
 
     public static By descContains(String part) {
+        if (Platform.ios() && isPlain(part)) {
+            return predicate("label CONTAINS " + quote(part));
+        }
         if (isPlain(part)) {
             return uiSelector("descriptionContains(\"" + escape(part) + "\")");
         }
@@ -63,8 +77,31 @@ public final class Locators {
         return descMatches(sb.append(')').toString());
     }
 
+    /** Element of a class whose content-desc CONTAINS the label (e.g. a tab with an unread badge "6\nThông báo"). */
+    public static By classWithDescContaining(String className, String label) {
+        if (Platform.ios()) {
+            return typedLabel(className, "(?s).*" + anyForm(label) + ".*");
+        }
+        return uiSelector("className(\"" + className + "\").descriptionMatches(\"(?s).*" + anyForm(label) + ".*\")");
+    }
+
+    /** Element of a class whose content-desc equals any of the labels (normalization-insensitive). */
+    public static By classWithDescAny(String className, String... labels) {
+        StringBuilder sb = new StringBuilder("(?:");
+        for (int i = 0; i < labels.length; i++) {
+            sb.append(i == 0 ? "" : "|").append(anyForm(labels[i]));
+        }
+        if (Platform.ios()) {
+            return typedLabel(className, "(?s)" + sb.append(')'));
+        }
+        return uiSelector("className(\"" + className + "\").descriptionMatches(\"(?s)" + sb.append(')') + "\")");
+    }
+
     /** Element of a specific class with an exact content-desc, e.g. bottom navigation ImageView. */
     public static By classWithDesc(String className, String desc) {
+        if (Platform.ios()) {
+            return typedLabel(className, "(?s)" + anyForm(desc));
+        }
         String cls = "className(\"" + className + "\")";
         if (isPlain(desc)) {
             return uiSelector(cls + ".description(\"" + escape(desc) + "\")");
@@ -74,11 +111,14 @@ public final class Locators {
 
     /** Flutter TabBar tab: content-desc looks like "&lt;name&gt;\nTab N trong tổng số M". */
     public static By tab(String name) {
-        return By.xpath("//*[starts-with(@content-desc,'" + name + "') and contains(@content-desc,'trong tổng số')]");
+        return xpath("//*[starts-with(@content-desc,'" + name + "') and contains(@content-desc,'trong tổng số')]");
     }
 
     /** N-th (0-based) EditText on screen. Flutter TextFields have no id/desc. */
     public static By editText(int index) {
+        if (Platform.ios()) {
+            return By.xpath("(//*[self::XCUIElementTypeTextField or self::XCUIElementTypeSecureTextField])[" + (index + 1) + "]");
+        }
         return uiSelector("className(\"android.widget.EditText\").instance(" + index + ")");
     }
 
@@ -101,9 +141,104 @@ public final class Locators {
 
     private static final java.util.regex.Pattern ZERO_WIDTH = java.util.regex.Pattern.compile("[\\u200B\\u200C\\u200D\\uFEFF]");
 
+    /**
+     * Password / PIN field. Android: EditText password=true. iOS: Flutter exposes obscured fields as a plain
+     * TextField labelled with its hint ("Mật khẩu", "Nhập mật khẩu đặt lệnh"), or SecureTextField.
+     */
+    public static By passwordField() {
+        if (Platform.ios()) {
+            // the hint label disappears once typed: then only the "•••" value identifies the field
+            return predicate("type == \"XCUIElementTypeSecureTextField\" OR (type == \"XCUIElementTypeTextField\" AND "
+                    + "(label MATCHES " + quote(PASSWORD_LABEL) + " OR value MATCHES " + quote(BULLETS) + "))");
+        }
+        return By.xpath("//android.widget.EditText[@password='true']");
+    }
+
+    /** Non-password text field (account number, amount, symbol search...). */
+    public static By textField() {
+        if (Platform.ios()) {
+            return predicate("type == \"XCUIElementTypeTextField\" AND NOT (label MATCHES " + quote(PASSWORD_LABEL)
+                    + ") AND NOT (value MATCHES " + quote(BULLETS) + ")");
+        }
+        return By.xpath("//android.widget.EditText[@password='false']");
+    }
+
+    /** PIN sheet: the password field, or the only text field when the app does not flag it as password. */
+    public static By pinField() {
+        if (Platform.ios()) {
+            return passwordField();
+        }
+        return By.xpath("//android.widget.EditText[@password='true'] | //android.widget.EditText");
+    }
+
+    private static final String BULLETS = "[•●]+";
+
+    private static final String PASSWORD_LABEL = "(?is).*(?:" + anyForm("mật khẩu") + "|" + anyForm("Mật khẩu")
+            + "|" + anyForm("mã PIN") + "|password).*";
+
+    /** All elements of an Android role (e.g. android.widget.RadioButton); translated on iOS. */
+    public static By byClass(String className) {
+        if (Platform.ios()) {
+            String[] types = Platform.iosTypes(className);
+            return types == null ? By.xpath("//*") : predicate(typeClause(types));
+        }
+        return By.className(className);
+    }
+
+    /**
+     * XPath written against the Android hierarchy, translated for iOS:
+     * {@code @content-desc -> @label}, {@code @clickable} -> accessible non-static-text element,
+     * EditText[@password] -> (Secure)TextField, Button -> XCUIElementTypeButton, View/ImageView -> any, Toast -> none.
+     */
+    public static By xpath(String androidXpath) {
+        return By.xpath(Platform.ios() ? toIosXpath(androidXpath) : androidXpath);
+    }
+
+    static String toIosXpath(String x) {
+        String clickable = "(@accessible='true' and not(self::XCUIElementTypeStaticText))";
+        return x.replace("android.widget.EditText[@password='true']", "XCUIElementTypeSecureTextField")
+                .replace("android.widget.EditText[@password='false']", "XCUIElementTypeTextField")
+                .replace("android.widget.EditText", "*[self::XCUIElementTypeTextField or self::XCUIElementTypeSecureTextField]")
+                .replace("android.widget.Button", "XCUIElementTypeButton")
+                .replace("android.widget.Toast", "XCUIElementTypeNone")
+                .replace("android.widget.ImageView",
+                        "*[self::XCUIElementTypeImage or self::XCUIElementTypeButton or self::XCUIElementTypeOther]")
+                .replace("android.view.View", "*")
+                .replace("@clickable='true'", clickable)
+                .replace("@clickable='false'", "not" + clickable)
+                .replace("@content-desc", "@label");
+    }
+
     // ------------------------------------------------------------------ internals
 
+    private static By predicate(String p) {
+        return AppiumBy.iOSNsPredicateString(p);
+    }
+
+    /** iOS: element of the role's XCUIElementType(s) whose label fully matches the ICU regex. */
+    private static By typedLabel(String className, String regex) {
+        String[] types = Platform.iosTypes(className);
+        String label = "label MATCHES " + quote(regex);
+        return predicate(types == null ? label : typeClause(types) + " AND " + label);
+    }
+
+    private static String typeClause(String[] types) {
+        StringBuilder sb = new StringBuilder("type IN {");
+        for (int i = 0; i < types.length; i++) {
+            sb.append(i == 0 ? "" : ",").append(quote(types[i]));
+        }
+        return sb.append('}').toString();
+    }
+
+    /** NSPredicate string literal; locator texts never contain '"' or backslash (see {@link #literal}). */
+    private static String quote(String s) {
+        return "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
+    }
+
     private static By descMatches(String regex) {
+        if (Platform.ios()) {
+            return predicate("label MATCHES " + quote("(?s)" + regex));
+        }
         return uiSelector("descriptionMatches(\"(?s)" + regex + "\")");
     }
 

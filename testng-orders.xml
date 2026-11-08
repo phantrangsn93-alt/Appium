@@ -1,0 +1,12 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Real orders only (Excel order scenarios + modify/cancel). UAT: enabled by config-uat.properties. -->
+<suite name="BSC Orders (real)" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+    </listeners>
+    <test name="Orders" preserve-order="true">
+        <classes>
+            <class name="vn.bsc.automation.tests.excel.ExcelOrderTest"/>
+        </classes>
+    </test>
+</suite>

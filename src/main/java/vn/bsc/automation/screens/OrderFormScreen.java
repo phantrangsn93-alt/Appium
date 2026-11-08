@@ -58,7 +58,7 @@ public class OrderFormScreen extends BaseScreen {
     private final By sellButton = Locators.descStartsWith("BÁN");
     private final By infoContainer = Locators.descContains("Sức mua:");
     private final By limitType = Locators.a11y(OrderType.LIMIT.label());
-    private final By validityRadios = By.className("android.widget.RadioButton");
+    private final By validityRadios = Locators.byClass("android.widget.RadioButton");
 
     /**
      * Price & quantity rows have no semantics labels: [ - ] [value] [ + ].
@@ -177,7 +177,7 @@ public class OrderFormScreen extends BaseScreen {
     // ------------------------------------------------------------------ symbol
 
     private static By suggestion(String symbol) {
-        return By.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,' | ')]");
+        return vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,' | ')]");
     }
 
     /**
@@ -288,6 +288,32 @@ public class OrderFormScreen extends BaseScreen {
 
     public String getMatchedVolumeText() {
         return infoValue("KL khớp lệnh:");
+    }
+
+    /**
+     * "KL Tối đa" = maximum quantity for the current side. On the SELL side it is the available stock
+     * balance of the symbol in the sub-account. Its value is a separate node (not inside the info container):
+     * the integer just right of the label, on the line under the ceiling/ref/floor prices.
+     */
+    public long getMaxQuantity() {
+        scrollToTop();
+        List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+        int limitTop = nodes.stream().filter(n -> OrderType.LIMIT.label().equals(n.desc()))
+                .mapToInt(UiNode::y).findFirst().orElseThrow(() -> new AssertionError("Order type row not found"));
+        int crfBottom = nodes.stream().filter(n -> n.y() < limitTop && DECIMAL_2.matcher(n.desc()).matches())
+                .mapToInt(n -> n.y() + n.height()).max().orElse(0);
+        int halfWidth = driver().manage().window().getSize().width / 2;
+        return nodes.stream()
+                .filter(n -> n.y() >= crfBottom && n.y() < limitTop && n.x() < halfWidth)
+                .filter(n -> n.desc().matches("^[0-9][0-9,]*$"))
+                .min(java.util.Comparator.comparingInt(UiNode::y))
+                .map(n -> NumberUtils.parseLong(n.desc()))
+                .orElseThrow(() -> new AssertionError("'KL Tối đa' value not found"));
+    }
+
+    /** Balance that an order of this side consumes: BUY -> Sức mua (VND), SELL -> KL Tối đa (shares). */
+    public long getAvailableBalance(Side side) {
+        return side == Side.BUY ? getBuyingPower() : getMaxQuantity();
     }
 
     // ------------------------------------------------------------------ order type / validity
@@ -444,15 +470,15 @@ public class OrderFormScreen extends BaseScreen {
 
     /** index 0 = "Trong ngày", 1 = "Nhiều ngày" (RadioButtons without content-desc) */
     public boolean isValidityChecked(int index) {
-        return Boolean.parseBoolean(validityRadio(index).getAttribute("checked"));
+        return Boolean.parseBoolean(validityRadio(index).getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr()));
     }
 
     @Step("Chọn hiệu lực index {index}")
     public OrderFormScreen selectValidity(int index) {
         org.openqa.selenium.WebElement radio = validityRadio(index);
-        if (!Boolean.parseBoolean(radio.getAttribute("checked"))) {
-            radio.click();
-            WaitUtils.condition(() -> Boolean.parseBoolean(validityRadio(index).getAttribute("checked")), Duration.ofSeconds(3));
+        if (!Boolean.parseBoolean(radio.getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr()))) {
+            vn.bsc.automation.core.driver.DeviceActions.tap(radio);
+            WaitUtils.condition(() -> Boolean.parseBoolean(validityRadio(index).getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr())), Duration.ofSeconds(3));
         }
         return this;
     }
@@ -692,7 +718,28 @@ public class OrderFormScreen extends BaseScreen {
         AlertDialog error = new AlertDialog();
         WaitUtils.condition(() -> confirm.isDisplayed(Duration.ofMillis(300)) || error.isShown(Duration.ofMillis(300)),
                 Duration.ofSeconds(15));
-        return confirm.isDisplayed(Duration.ofSeconds(1)) ? confirm : null;
+        // Seen on UAT: the "Xác nhận đặt lệnh" sheet opens and an error dialog (e.g. E_SYSTEM_ERROR) pops up ON TOP
+        // of it. The modal hides the sheet's semantics, so close the error first, then look for the sheet again.
+        if (error.isShown(Duration.ofMillis(500))) {
+            String msg = error.getMessage();
+            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Lỗi khi mở xác nhận lệnh: " + msg);
+            vn.bsc.automation.core.utils.AllureUtils.attachText("Lỗi hiển thị trên màn xác nhận lệnh", msg);
+            log.warn("Error dialog over the order confirmation: {}", msg);
+            lastPreConfirmError = msg;
+            if (error.hasButton(AlertDialog.BTN_CLOSE)) {
+                error.close();
+            }
+        } else {
+            lastPreConfirmError = null;
+        }
+        return confirm.isDisplayed(Duration.ofSeconds(3)) ? confirm : null;
+    }
+
+    private String lastPreConfirmError;
+
+    /** Error that popped up over the confirmation sheet during the last {@link #submitRealOrder()} (null = none). */
+    public String lastPreConfirmError() {
+        return lastPreConfirmError;
     }
 
     public boolean isSubmitButtonVisible() {

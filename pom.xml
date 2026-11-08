@@ -12,6 +12,8 @@
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Results folder of one run; give each parallel run its own (-Dresults.dir=target/ios) -->
+        <results.dir>${project.build.directory}</results.dir>
 
         <!-- Dependency versions (pinned) -->
         <appium.java-client.version>10.1.1</appium.java-client.version>
@@ -81,8 +83,10 @@
                         -Dfile.encoding=UTF-8
                         -javaagent:"${settings.localRepository}/org/aspectj/aspectjweaver/${aspectj.version}/aspectjweaver-${aspectj.version}.jar"
                     </argLine>
+                    <reportsDirectory>${results.dir}/surefire-reports</reportsDirectory>
                     <systemPropertyVariables>
-                        <allure.results.directory>${project.build.directory}/allure-results</allure.results.directory>
+                        <allure.results.directory>${results.dir}/allure-results</allure.results.directory>
+                        <results.dir>${results.dir}</results.dir>
                     </systemPropertyVariables>
                     <testFailureIgnore>false</testFailureIgnore>
                 </configuration>

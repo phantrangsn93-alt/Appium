@@ -28,10 +28,14 @@ public class AlertDialog extends BaseScreen {
     private static final String TITLE = "Thông báo";
 
     /** Any non-button View with text: the modal hides the semantics of the page below it. */
-    private final By textNodes = By.xpath("//android.view.View[string-length(@content-desc)>0]");
+    private final By textNodes = vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[string-length(@content-desc)>0]");
     private static final String BARRIER = "Bỏ qua";
     /** Either the modal barrier or one of the standard dialog buttons (some dialogs have no barrier node). */
-    private final By anyDialogMarker = Locators.descMatchesAny("Bỏ qua", BTN_CLOSE, BTN_YES, BTN_NO);
+    /**
+     * A real dialog = one of its BUTTONS ("Đóng", "Có", "Không", "Bỏ qua") is shown. Matching any node with these
+     * labels gave false positives (e.g. the numeric keypad's "Đóng" key + any header Button).
+     */
+    private final By anyDialogMarker = Locators.classWithDescAny("android.widget.Button", "Bỏ qua", BTN_CLOSE, BTN_YES, BTN_NO);
 
     @Override
     protected By anchor() {
@@ -43,7 +47,7 @@ public class AlertDialog extends BaseScreen {
     }
 
     public boolean isShown(Duration timeout) {
-        return WaitUtils.isVisible(anyDialogMarker, timeout) && !findAll(By.className("android.widget.Button")).isEmpty();
+        return WaitUtils.isVisible(anyDialogMarker, timeout);
     }
 
     /** Message text (title "Thông báo" excluded). */

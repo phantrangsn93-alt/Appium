@@ -26,7 +26,8 @@ public class BottomNavBar extends BaseScreen {
     }
 
     private static By item(Item item) {
-        return Locators.classWithDesc("android.widget.ImageView", item.label());
+        // an unread badge is prepended to the label: "6\nThông báo"
+        return Locators.classWithDescContaining("android.widget.ImageView", item.label());
     }
 
     @Override

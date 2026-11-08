@@ -41,7 +41,7 @@ public class ExcelLoginTest extends BaseTest {
         }
 
         // Steps 2-7
-        loginFlow.loginManually();
+        loginFlow.loginViaMenuWithOtherAccount(); // .env credentials ("file cài đặt"), else typed by the tester
 
         // Expected: Đăng nhập thành công
         assertThat(new BottomNavBar().isDisplayed()).as("Vào màn hình chính").isTrue();

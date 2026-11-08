@@ -1,6 +1,6 @@
 package vn.bsc.automation.core.utils;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.screenrecording.CanRecordScreen;
 import io.qameta.allure.Allure;
 import org.openqa.selenium.OutputType;
 import vn.bsc.automation.core.driver.DriverManager;
@@ -43,7 +43,7 @@ public final class AllureUtils {
             return;
         }
         try {
-            DriverManager.getDriver().startRecordingScreen();
+            ((CanRecordScreen) DriverManager.getDriver()).startRecordingScreen();
         } catch (Exception ignored) {
         }
     }
@@ -54,7 +54,7 @@ public final class AllureUtils {
             return;
         }
         try {
-            AndroidDriver d = DriverManager.getDriver();
+            CanRecordScreen d = (CanRecordScreen) DriverManager.getDriver();
             String base64 = d.stopRecordingScreen();
             if (attach && base64 != null && !base64.isEmpty()) {
                 Allure.addAttachment(name, "video/mp4", new ByteArrayInputStream(Base64.getMimeDecoder().decode(base64)), ".mp4");

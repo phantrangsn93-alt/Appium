@@ -20,7 +20,7 @@ public class MenuScreen extends BaseScreen {
     };
 
     private final By titleBar = Locators.classWithDesc("android.widget.Button", "Menu");
-    private final By descLessImages = By.xpath("//android.widget.ImageView[@clickable='true' and not(@content-desc)]"
+    private final By descLessImages = vn.bsc.automation.core.utils.Locators.xpath("//android.widget.ImageView[@clickable='true' and not(@content-desc)]"
             + " | //android.widget.ImageView[@clickable='true' and @content-desc='']");
 
     @Override

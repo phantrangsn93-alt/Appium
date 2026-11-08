@@ -155,8 +155,9 @@ public class LoginTest extends BaseTest {
         loginFlow.ensureLoggedIn();
         loginFlow.logout();
 
-        assertThat(new AppHeader().showsAccount(AppConfig.username()))
-                .as("Không còn hiển thị tài khoản sau khi đăng xuất").isFalse();
+        // the remembered-account login screen still shows the custody code: check the APP STATE instead
+        assertThat(loginFlow.detectState()).as("Không còn phiên đăng nhập sau khi đăng xuất")
+                .isNotEqualTo(vn.bsc.automation.flows.LoginFlow.AppState.LOGGED_IN);
         LoginScreen screen = loginFlow.ensureLoggedOut();
         assertThat(screen.isDisplayed()).as("Màn hình đăng nhập").isTrue();
         String remembered = screen.isRememberedMode() ? screen.getRememberedAccount() : screen.getUsernameValue();

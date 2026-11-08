@@ -40,7 +40,7 @@ public class StockDetailScreen extends BaseScreen {
 
     /** Header text, e.g. "TLD\n|\nHOSE\nCông ty Cổ phần ...". */
     public String getHeader() {
-        return getDesc(By.xpath("(//android.widget.ImageView[contains(@content-desc,'|')])[1]"));
+        return getDesc(vn.bsc.automation.core.utils.Locators.xpath("(//android.widget.ImageView[contains(@content-desc,'|')])[1]"));
     }
 
     public BigDecimal ceiling() {

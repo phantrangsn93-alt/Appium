@@ -17,3 +17,7 @@ logs/
 # Local tooling
 *.log
 .claude/
+
+# Report tool dependencies / generated reports
+tools/report/node_modules/
+reports/

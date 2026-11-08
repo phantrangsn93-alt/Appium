@@ -16,8 +16,19 @@ public final class AppConfig {
         return ConfigReader.getBool("appium.server.autostart", true);
     }
 
+    /** Target platform: {@code platform.name} = Android (default) | iOS. Override with -Dplatform.name=iOS or PLATFORM_NAME. */
+    public static boolean isIOS() {
+        return "ios".equalsIgnoreCase(ConfigReader.get("platform.name", "Android"));
+    }
+
+    /** Device udid of the selected platform (Android: device.udid, iOS: ios.udid). */
     public static String udid() {
-        return ConfigReader.get("device.udid");
+        return isIOS() ? ConfigReader.get("ios.udid") : ConfigReader.get("device.udid");
+    }
+
+    /** Application id of the selected platform (Android package or iOS bundle id). */
+    public static String appId() {
+        return isIOS() ? ConfigReader.getRequired("ios.bundle.id") : appPackage();
     }
 
     public static String appPackage() {

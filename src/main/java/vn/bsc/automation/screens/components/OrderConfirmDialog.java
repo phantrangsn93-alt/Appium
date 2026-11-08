@@ -22,12 +22,19 @@ import java.time.Duration;
  */
 public class OrderConfirmDialog extends BaseScreen {
 
-    private final By confirmButton = Locators.descMatchesAny("Xác nhận");
-    private final By pinField = By.xpath("//android.widget.EditText");
+    /**
+     * Sheet title "Xác nhận đặt lệnh" / "Huỷ lệnh\nĐã xác thực" / "Sửa lệnh...". Used as the anchor: the
+     * "Xác nhận" BUTTON is not in the accessibility tree while it is disabled (before the PIN is typed).
+     */
+    private final By title = Locators.descRegex("(?:" + Locators.anyForm("Xác nhận ") + "|" + Locators.anyForm("Huỷ lệnh")
+            + "|" + Locators.anyForm("Hủy lệnh") + "|" + Locators.anyForm("Sửa lệnh") + ").*");
+    private final By confirmButton = Locators.a11y("Xác nhận");
+    /** "Nhập mật khẩu đặt lệnh" (PIN method) - a masked EditText. */
+    private final By pinField = vn.bsc.automation.core.utils.Locators.pinField();
 
     @Override
     protected By anchor() {
-        return confirmButton;
+        return title;
     }
 
     public void attachEvidence(String label) {
@@ -37,7 +44,7 @@ public class OrderConfirmDialog extends BaseScreen {
 
     /**
      * Excel steps "Nhập Pin" + "Xác nhận". With BSC_ORDER_PIN set in .env the PIN is typed automatically;
-     * otherwise waits for the tester to type it on the phone. If the dialog has no PIN field (PIN remembered
+     * otherwise waits for the tester to type it on the phone. If the sheet has no PIN field (PIN remembered
      * for the session) only "Xác nhận" is tapped.
      */
     public void enterPinAndConfirm(String context) {
@@ -45,23 +52,83 @@ public class OrderConfirmDialog extends BaseScreen {
         String pin = AppConfig.orderPin();
         if (pin != null) {
             if (isVisible(pinField, Duration.ofSeconds(3))) {
-                log.info("Nhập PIN tự động (từ .env) cho: {}", context);
-                type(pinField, pin);
-                hideKeyboard();
+                log.info("Nhập PIN tự động (từ .env) cho: {}", context); // never log the PIN itself
+                typePin(pin, context);
+                closeKeyboardWithoutBack();
+            } else {
+                log.warn("Không thấy ô nhập PIN trên màn xác nhận ({})", context);
             }
-            if (isDisplayed(Duration.ofSeconds(1))) {
+        } else {
+            ManualInput.waitForUser("Nhập mã PIN trên điện thoại cho: " + context + " (rồi ẩn bàn phím hoặc tự bấm Xác nhận)",
+                    () -> !isDisplayed(Duration.ofMillis(300)) || isPinTyped());
+            closeKeyboardWithoutBack();
+        }
+        tapConfirmWhenEnabled(context);
+        WaitUtils.waitInvisible(title, Duration.ofSeconds(15));
+    }
+
+    /**
+     * Flutter password fields ignore UiAutomator2's setText (the field looks filled but the app reads it as
+     * empty: "Chưa nhập mã xác thực"). Focus the field and type real key events, then verify the number of
+     * "•" equals the PIN length; fall back to sendKeys once.
+     */
+    private void typePin(String pin, String context) {
+        org.openqa.selenium.WebElement field = find(pinField);
+        vn.bsc.automation.core.driver.DeviceActions.tap(field);
+        vn.bsc.automation.core.driver.DeviceActions.typeKeys(field, pin);
+        if (!vn.bsc.automation.core.utils.WaitUtils.condition(() -> pinLength() == pin.length(), Duration.ofSeconds(3))) {
+            log.warn("PIN not registered by key events ({} chars) - retrying with sendKeys", pinLength());
+            field = find(pinField);
+            vn.bsc.automation.core.driver.DeviceActions.tap(field);
+            vn.bsc.automation.core.driver.DeviceActions.clear(field);
+            field.sendKeys(pin);
+        }
+        if (pinLength() != pin.length()) {
+            AllureUtils.attachScreenshot("PIN không nhập được - " + context);
+            throw new AssertionError("Không nhập được PIN vào ô mật khẩu đặt lệnh (" + context + ")");
+        }
+    }
+
+    private int pinLength() {
+        try {
+            String t = getText(pinField);
+            return t == null ? 0 : t.length();
+        } catch (Exception | AssertionError e) {
+            return -1;
+        }
+    }
+
+    /**
+     * NEVER driver.hideKeyboard() here: on Android it sends BACK, which dismisses the bottom sheet and the
+     * order is silently not sent. Use the keyboard's own "done" action, then tap the sheet title if needed.
+     */
+    private void closeKeyboardWithoutBack() {
+        try {
+            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
+                vn.bsc.automation.core.driver.DeviceActions.keyboardDone();
+            }
+            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
+                tapCenter(title);
+            }
+        } catch (Exception e) {
+            log.info("Keyboard close: {}", e.getMessage());
+        }
+    }
+
+    /** The button appears in the tree once enabled; it sits at the bottom of the sheet (may need a small scroll). */
+    private void tapConfirmWhenEnabled(String context) {
+        if (!isDisplayed(Duration.ofSeconds(1))) {
+            return; // tester already confirmed, or the sheet closed
+        }
+        for (int i = 0; i < 3; i++) {
+            if (isVisible(confirmButton, Duration.ofSeconds(i == 0 ? 3 : 1))) {
                 tap(confirmButton);
+                return;
             }
-            WaitUtils.waitInvisible(confirmButton, Duration.ofSeconds(15));
-            return;
+            vn.bsc.automation.core.utils.GestureUtils.scrollBy(0.15);
         }
-        ManualInput.waitForUser("Nhập mã PIN trên điện thoại cho: " + context + " (rồi ẩn bàn phím hoặc tự bấm Xác nhận)",
-                () -> !isDisplayed(Duration.ofMillis(300)) || isPinTyped());
-        if (isDisplayed(Duration.ofSeconds(1))) {
-            hideKeyboard();
-            tap(confirmButton);
-        }
-        WaitUtils.waitInvisible(confirmButton, Duration.ofSeconds(15));
+        AllureUtils.attachScreenshot("Nút Xác nhận không bấm được - " + context);
+        throw new AssertionError("Nút 'Xác nhận' không khả dụng sau khi nhập PIN (" + context + ")");
     }
 
     private boolean isPinTyped() {
@@ -69,6 +136,6 @@ public class OrderConfirmDialog extends BaseScreen {
             return false; // no PIN field (e.g. PIN remembered for the session) -> tester taps Xác nhận
         }
         String t = getText(pinField);
-        return t != null && !t.isBlank() && !driver().isKeyboardShown();
+        return t != null && !t.isBlank() && !vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown();
     }
 }

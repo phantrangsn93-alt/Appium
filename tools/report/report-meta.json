@@ -1,0 +1,132 @@
+{
+  "_comment": "Static content of the ISTQB Test Summary Report. Edit freely - no code change needed. Device/app/env are read from adb + .env at generation time when available.",
+  "project": "BSC Mobile Trading – Kiểm thử tự động (Appium)",
+  "documentId": "BSC-MT-TSR",
+  "documentVersion": "1.0",
+  "preparedBy": "BA Team",
+  "organization": "BSC – BIDV Securities",
+  "testLevel": "Kiểm thử hệ thống (System test) – giao diện ứng dụng di động",
+  "testType": "Kiểm thử chức năng, hồi quy (regression), smoke; tự động hoá bằng Appium + TestNG",
+  "objectives": [
+    "Xác nhận các chức năng chính của ứng dụng BSC Mobile Trading hoạt động đúng sau khi cập nhật ứng dụng.",
+    "Thực thi bộ kịch bản trong tài liệu \"Kịch bản kiểm thử sau khi update App.xlsx\" và các bộ hồi quy.",
+    "Cung cấp thông tin để ra quyết định phát hành (release) dựa trên kết quả và rủi ro tồn đọng."
+  ],
+  "inScope": [
+    "Đăng nhập / đăng xuất (tài khoản hợp lệ, không hợp lệ, bỏ trống).",
+    "Điều hướng: Thị trường, Bảng giá, Giao dịch, Tìm kiếm, Thông báo, Menu.",
+    "Bảng giá: thẻ chỉ số, danh sách mã, sắp xếp, tin tức.",
+    "Form đặt lệnh: LO, ATO/ATC/MTL/MOK/MAK/PLO, lô lẻ, lệnh điều kiện (Stop Limit, Trailing Stop, OCO), Mua/Bán, HOSE/HNX/UPCOM/Phái sinh (dry-run: điền form, không gửi lệnh).",
+    "Sổ lệnh, Danh mục, Tài sản (chỉ đọc); Tìm kiếm và chi tiết mã; các mục Menu.",
+    "Đặt lệnh thật / Sửa / Huỷ / Huỷ tất cả trên môi trường UAT (khi được bật).",
+    "Giao dịch trong Menu: chuyển tiền nội bộ/ra ngoài, nộp/rút phái sinh, nộp/rút CCP, phong toả/giải toả, chuyển chứng khoán (100,000 VND / 100 CP)."
+  ],
+  "outOfScope": [
+    "Đổi mật khẩu, xác thực 2 yếu tố, xoá thiết bị đã xác minh, đổi ngôn ngữ/cỡ chữ (phá vỡ môi trường kiểm thử).",
+    "Tổng đài (gọi điện thật), các liên kết mở ứng dụng bên ngoài (Chrome, Microsoft Forms, Mtrader).",
+    "Kiểm thử hiệu năng, bảo mật, tương thích đa thiết bị / iOS.",
+    "Kiểm thử API / back-end trực tiếp."
+  ],
+  "approach": [
+    "Page Object Model, dữ liệu kiểm thử tách khỏi code (CSV/JSON), data-driven cho đặt lệnh.",
+    "Kết quả phụ thuộc phiên giao dịch: trong phiên kỳ vọng thành công; đặt sai phiên hệ thống báo lỗi được tính là PASS.",
+    "Bằng chứng tự động: ảnh chụp màn hình, page source, video khi test lỗi (Allure).",
+    "An toàn: lệnh thật chỉ chạy khi được bật cờ; huỷ tất cả chỉ áp dụng cho lệnh do test tạo."
+  ],
+  "exitCriteria": {
+    "minExecutedPercent": 95,
+    "minPassPercent": 95,
+    "maxOpenCriticalDefects": 0,
+    "note": "Lỗi hệ thống luôn tính Không đạt."
+  },
+  "findings": [
+    {
+      "id": "F-01",
+      "severity": "Trung bình",
+      "title": "Đăng nhập tài khoản không tồn tại hiển thị \"Mã sự kiện không tồn tại\" kèm mã sự kiện",
+      "status": "Mở",
+      "note": "Thông báo khó hiểu với người dùng – cần BA xác nhận thông báo mong đợi."
+    },
+    {
+      "id": "F-02",
+      "severity": "Thấp",
+      "title": "Trong giờ batch, chọn mã/tiểu khoản hiển thị \"Lỗi :ACCOUNTID_NOT_EXIT\"",
+      "status": "Mở",
+      "note": "Sai chính tả (EXIT/EXIST); nên thông báo hệ thống đang xử lý cuối ngày."
+    },
+    {
+      "id": "F-03",
+      "severity": "Trung bình",
+      "title": "Chuyển Limit → Market đôi khi ô loại lệnh thị trường để trống, không có giá trị mặc định",
+      "status": "Mở",
+      "note": "Người dùng có thể không biết đang chọn loại lệnh nào."
+    },
+    {
+      "id": "F-04",
+      "severity": "Thấp",
+      "title": "Chuyển Market → Limit thì giá đặt bị đặt lại về 0",
+      "status": "Mở",
+      "note": ""
+    },
+    {
+      "id": "F-05",
+      "severity": "Thấp",
+      "title": "Nhãn giao diện trộn Unicode NFC/NFD/tổ hợp một phần",
+      "status": "Mở",
+      "note": "Ảnh hưởng trình đọc màn hình (accessibility)."
+    },
+    {
+      "id": "F-06",
+      "severity": "Thấp",
+      "title": "Phiên đăng nhập hết hạn chuyển về chế độ khách không có thông báo",
+      "status": "Mở",
+      "note": ""
+    },
+    {
+      "id": "F-07",
+      "severity": "Trung bình",
+      "title": "Lệnh OCO: bấm MUA không phản hồi gì (không mở xác nhận, không thông báo) khi sức mua = 0",
+      "status": "Mở",
+      "note": "App nên báo rõ lý do (vd. không đủ sức mua cho chân LO)."
+    },
+    {
+      "id": "F-08",
+      "severity": "Cao",
+      "title": "UAT: lệnh thường trả E_SYSTEM_ERROR, giao dịch tiền trả \"Lỗi hệ thống.\" sau khi xác nhận (07/11/2026 – thứ Bảy)",
+      "status": "Mở",
+      "note": "Cần đội hệ thống xác nhận UAT có xử lý giao dịch cuối tuần; chạy lại thứ Hai."
+    },
+    {
+      "id": "F-09",
+      "severity": "Thấp",
+      "title": "Ngày hiệu lực lệnh điều kiện hiển thị 28/09/2026 trong khi ngày thực tế 07/11/2026",
+      "status": "Mở",
+      "note": "Ngày hệ thống UAT có thể đang lệch."
+    },
+    {
+      "id": "F-10",
+      "severity": "Thấp",
+      "title": "Tiểu khoản Thường: Sức mua 0 nhưng \"Số tiền tối đa được chuyển\" 11,001,902,209",
+      "status": "Mở",
+      "note": "Cần BA xác nhận hai chỉ số có nhất quán."
+    }
+  ],
+  "risks": [
+    "Hệ thống lõi UAT trả lỗi (E_SYSTEM_ERROR / Lỗi hệ thống) cho lệnh thường và giao dịch tiền ngày 07/11/2026 – các kịch bản này cần chạy lại khi UAT hoạt động.",
+    "Đặt lệnh thật, Sửa/Huỷ lệnh và giao dịch tiền trong Menu chưa được thực thi đầy đủ trên thiết bị tại thời điểm lập báo cáo (nếu không có kết quả trong bảng chi tiết).",
+    "Kiểm thử chỉ trên 1 thiết bị Android (Xiaomi Mi MIX 2S, Android 10).",
+    "Một số kiểm tra phụ thuộc dữ liệu thị trường thời gian thực và trạng thái tài khoản UAT (sức mua, danh mục).",
+    "Kết nối USB không ổn định trong quá trình chạy có thể gây lỗi môi trường (không phải lỗi ứng dụng)."
+  ],
+  "recommendations": [
+    "Thực thi bộ đặt lệnh thật (Excel No.2–15) trong giờ giao dịch, sau khi hệ thống chạy batch xong.",
+    "BA/Dev xem xét các phát hiện F-01 → F-06.",
+    "Đội Dev bổ sung định danh (Semantics identifier) cho các ô nhập, nút +/− và icon để tăng độ ổn định của kiểm thử tự động.",
+    "Mở rộng kiểm thử trên thêm thiết bị / phiên bản Android và iOS."
+  ],
+  "approvers": [
+    "Trưởng nhóm kiểm thử",
+    "Trưởng nhóm BA",
+    "Đại diện Dev / Sản phẩm"
+  ]
+}

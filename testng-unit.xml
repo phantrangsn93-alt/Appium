@@ -5,6 +5,13 @@
         <classes>
             <class name="vn.bsc.automation.unit.LocatorsTest"/>
             <class name="vn.bsc.automation.unit.OrderDataTest"/>
+            <class name="vn.bsc.automation.unit.OrderBookMatchTest"/>
+        </classes>
+    </test>
+    <!-- separate <test>: switches platform.name=iOS for its own classes, must not run in parallel with Android ones -->
+    <test name="iOS platform (no device)">
+        <classes>
+            <class name="vn.bsc.automation.unit.IosPlatformTest"/>
         </classes>
     </test>
 </suite>

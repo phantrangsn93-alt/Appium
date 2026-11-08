@@ -1,0 +1,4 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Maintenance: cancel leftover conditional test orders by "Giờ đặt" (see OrderCleanupTest). -->
+<suite name="BSC cleanup"><listeners><listener class-name="vn.bsc.automation.listeners.TestListener"/></listeners>
+<test name="cleanup"><classes><class name="vn.bsc.automation.tests.tools.OrderCleanupTest"/></classes></test></suite>

@@ -66,6 +66,20 @@ public final class GestureUtils {
 
     /** Native UiAutomator2 swipe gesture inside an element (e.g. horizontal carousel). */
     public static void swipeIn(WebElement el, String direction, double percent) {
+        if (vn.bsc.automation.core.config.Platform.ios()) {
+            Rectangle r = el.getRect();
+            int cx = r.getX() + r.getWidth() / 2, cy = r.getY() + r.getHeight() / 2;
+            int dx = (int) (r.getWidth() * percent / 2), dy = (int) (r.getHeight() * percent / 2);
+            Point from = new Point(cx, cy), to;
+            switch (direction.toLowerCase()) {
+                case "left" -> { from = new Point(cx + dx, cy); to = new Point(cx - dx, cy); }
+                case "right" -> { from = new Point(cx - dx, cy); to = new Point(cx + dx, cy); }
+                case "up" -> { from = new Point(cx, cy + dy); to = new Point(cx, cy - dy); }
+                default -> { from = new Point(cx, cy - dy); to = new Point(cx, cy + dy); }
+            }
+            swipe(from, to, Duration.ofMillis(400));
+            return;
+        }
         DriverManager.getDriver().executeScript("mobile: swipeGesture", Map.of(
                 "elementId", ((org.openqa.selenium.remote.RemoteWebElement) el).getId(),
                 "direction", direction,

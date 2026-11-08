@@ -10,7 +10,7 @@ import java.util.concurrent.TimeUnit;
 
 /**
  * Pool of devices for parallel execution. Configure {@code devices=udid1:8200,udid2:8201}
- * (udid:UiAutomator2 systemPort - ports must be unique). Each test class borrows one free device for its
+ * (udid:UiAutomator2 systemPort - ports must be unique; iOS: {@code ios.devices=udid:wdaLocalPort}). Each test class borrows one free device for its
  * whole lifetime, so with N devices N classes run at the same time ({@code parallel="classes"}).
  * <p>
  * One Android device runs one app instance: parallelism always means more devices/emulators.
@@ -23,12 +23,15 @@ public final class DevicePool {
     private static final Logger LOG = LoggerFactory.getLogger(DevicePool.class);
     private static final BlockingQueue<Device> FREE = new LinkedBlockingQueue<>();
     private static final ThreadLocal<Device> CURRENT = new ThreadLocal<>();
+    private static final java.util.Set<Device> BORROWED = java.util.concurrent.ConcurrentHashMap.newKeySet();
 
     static {
-        String cfg = ConfigReader.get("devices", "");
+        // iOS: ios.devices=udid:wdaLocalPort,... (WebDriverAgent ports must be unique, e.g. 8100, 8101)
+        boolean ios = vn.bsc.automation.core.config.AppConfig.isIOS();
+        String cfg = ConfigReader.get(ios ? "ios.devices" : "devices", "");
         if (cfg.isBlank()) {
-            String udid = ConfigReader.get("device.udid", "");
-            cfg = udid + ":" + ConfigReader.getInt("system.port", 8200);
+            String udid = ios ? ConfigReader.get("ios.udid", "") : ConfigReader.get("device.udid", "");
+            cfg = udid + ":" + (ios ? ConfigReader.getInt("ios.wda.port", 8100) : ConfigReader.getInt("system.port", 8200));
         }
         for (String d : cfg.split(",")) {
             String[] p = d.trim().split(":");
@@ -52,6 +55,7 @@ public final class DevicePool {
                 throw new IllegalStateException("No free device within 60 minutes");
             }
             CURRENT.set(d);
+            BORROWED.add(d);
             LOG.info("[{}] acquired device {}", Thread.currentThread().getName(), d.udid());
             return d;
         } catch (InterruptedException e) {
@@ -64,9 +68,21 @@ public final class DevicePool {
         Device d = CURRENT.get();
         if (d != null) {
             CURRENT.remove();
+            BORROWED.remove(d);
             FREE.add(d);
             LOG.info("[{}] released device {}", Thread.currentThread().getName(), d.udid());
         }
+    }
+
+    /** Returns every borrowed device to the pool (end of suite with shared sessions). */
+    public static void releaseAll() {
+        BORROWED.forEach(d -> {
+            if (!FREE.contains(d)) {
+                FREE.add(d);
+            }
+        });
+        BORROWED.clear();
+        CURRENT.remove();
     }
 
     /** Device used by the current thread (null when the udid came from testng.xml parameters). */

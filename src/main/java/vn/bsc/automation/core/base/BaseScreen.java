@@ -1,6 +1,8 @@
 package vn.bsc.automation.core.base;
 
-import io.appium.java_client.android.AndroidDriver;
+import io.appium.java_client.AppiumDriver;
+import vn.bsc.automation.core.config.Platform;
+import vn.bsc.automation.core.driver.DeviceActions;
 import io.qameta.allure.Allure;
 import org.openqa.selenium.By;
 import org.openqa.selenium.StaleElementReferenceException;
@@ -25,7 +27,7 @@ public abstract class BaseScreen {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    protected AndroidDriver driver() {
+    protected AppiumDriver driver() {
         return DriverManager.getDriver();
     }
 
@@ -93,7 +95,16 @@ public abstract class BaseScreen {
     // ---------------------------------------------------------------- actions
 
     protected void tap(By by) {
-        step("Tap " + by, () -> retryOnStale(() -> WaitUtils.clickable(by).click()));
+        step("Tap " + by, () -> retryOnStale(() -> {
+            WebElement el;
+            try {
+                el = WaitUtils.clickable(by);
+            } catch (org.openqa.selenium.TimeoutException e) {
+                evidence("Không bấm được: " + by);
+                throw e;
+            }
+            DeviceActions.tap(el);
+        }));
     }
 
     /** Coordinate tap on the element centre - for Flutter widgets without accessibility action. */
@@ -104,8 +115,12 @@ public abstract class BaseScreen {
     protected void type(By by, String text) {
         step("Type into " + by, () -> retryOnStale(() -> {
             WebElement el = WaitUtils.clickable(by);
-            el.click();
-            el.clear();
+            DeviceActions.tap(el);
+            if (Platform.ios()) {
+                // a focused obscured Flutter field turns from TextField into SecureTextField (new element)
+                el = WaitUtils.visible(by, AppConfig.shortTimeout());
+            }
+            DeviceActions.clear(el);
             el.sendKeys(text);
         }));
     }
@@ -117,11 +132,11 @@ public abstract class BaseScreen {
 
     /** Flutter puts visible text into content-desc rather than text. NFC-normalised. */
     protected String getDesc(By by) {
-        return Locators.nfc(retryOnStaleGet(() -> find(by).getAttribute("content-desc")));
+        return Locators.nfc(retryOnStaleGet(() -> find(by).getAttribute(Platform.labelAttr())));
     }
 
     protected String getDesc(WebElement el) {
-        return Locators.nfc(el.getAttribute("content-desc"));
+        return Locators.nfc(el.getAttribute(Platform.labelAttr()));
     }
 
     protected boolean isSelected(By by) {
@@ -138,24 +153,33 @@ public abstract class BaseScreen {
     }
 
     protected boolean isChecked(By by) {
-        return Boolean.parseBoolean(find(by).getAttribute("checked"));
+        // iOS: Flutter maps the checked state of radios/checkboxes to the selected trait
+        return Boolean.parseBoolean(find(by).getAttribute(Platform.checkedAttr()));
     }
 
     public void hideKeyboard() {
-        try {
-            if (driver().isKeyboardShown()) {
-                driver().hideKeyboard();
-            }
-        } catch (Exception ignored) {
-            // keyboard may already be hidden
-        }
+        DeviceActions.hideKeyboard();
     }
 
     public void pressBack() {
-        driver().navigate().back();
+        DeviceActions.back(); // iOS: AppBar back button or edge swipe
     }
 
     // ---------------------------------------------------------------- helpers
+
+    /** Screenshot + page source into the report (and target/evidence/) when an interaction fails. */
+    protected void evidence(String title) {
+        try {
+            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot(title);
+            String src = driver().getPageSource();
+            Allure.addAttachment(title + " (page source)", "text/xml", src, ".xml");
+            java.nio.file.Path dir = java.nio.file.Paths.get(System.getProperty("results.dir", "target"), "evidence");
+            java.nio.file.Files.createDirectories(dir);
+            java.nio.file.Files.writeString(dir.resolve(System.currentTimeMillis() + ".xml"), src);
+        } catch (Exception ignored) {
+            // evidence is best effort
+        }
+    }
 
     protected void step(String name, Runnable action) {
         log.info(name);

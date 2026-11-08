@@ -1,0 +1,263 @@
+{
+  "_comment": "Danh sách tab/mục phải CÓ DỮ LIỆU (trống => FAIL). Khảo sát trên UAT.1-master-UAT5 ngày 07/11/2026. Sửa file này khi app thêm/bớt tab, không cần sửa code.",
+  "priceBoard": {
+    "_comment": "Bảng giá: hàng bộ chọn (chip) theo thứ tự trái -> phải. chip = vị trí (0 = đầu hàng). options rỗng = bấm chip mở thẳng danh sách; watchlist: tên danh mục -> các tab con.",
+    "selectors": [
+      {
+        "chip": 0,
+        "name": "Danh mục",
+        "kind": "watchlist",
+        "watchlists": {
+          "Khuyến nghị": [
+            "BSC10",
+            "BSC30",
+            "BSC50"
+          ],
+          "Danh mục nắm giữ": []
+        }
+      },
+      {
+        "chip": 1,
+        "name": "Chỉ số",
+        "options": [
+          "VNINDEX",
+          "VN30",
+          "HNXINDEX",
+          "HNX30",
+          "HNXMan",
+          "HNXFin",
+          "HNXMSCap",
+          "VNX50",
+          "VNSI",
+          "VNXALL",
+          "VNFINLEAD",
+          "VNMID",
+          "VNDIAMOND",
+          "VN100",
+          "VNSML",
+          "VNFINSELECT",
+          "VNALL",
+          "UPCOM"
+        ]
+      },
+      {
+        "chip": 2,
+        "name": "CP ngành",
+        "options": [
+          "Tất cả",
+          "Ôtô & linh kiện phụ tùng",
+          "Viễn thông",
+          "Dầu khí",
+          "Đồ dùng cá nhân & đồ gia dụng",
+          "Dịch vụ bán lẻ",
+          "Dịch vụ tài chính",
+          "Hóa chất",
+          "Bất động sản",
+          "Dịch vụ tiện ích",
+          "Bảo hiểm",
+          "Tài nguyên",
+          "Ngân hàng",
+          "Thực phẩm & Đồ uống",
+          "Phương tiện truyền thông",
+          "Công nghệ Thông tin",
+          "Du lịch & Giải trí",
+          "Y tế",
+          "Xây dựng & Vật liệu",
+          "Hàng hóa & dịch vụ công nghiệp"
+        ]
+      },
+      {
+        "chip": 3,
+        "name": "Phái sinh",
+        "options": [
+          "Phái sinh",
+          "HĐTL chỉ số",
+          "HĐTL TPCP"
+        ]
+      },
+      {
+        "chip": 4,
+        "name": "Chứng quyền",
+        "options": []
+      },
+      {
+        "chip": 5,
+        "name": "ETFs",
+        "options": []
+      },
+      {
+        "chip": 6,
+        "name": "Lô lẻ",
+        "options": [
+          "HOSE",
+          "HNX",
+          "UPCOM"
+        ]
+      },
+      {
+        "chip": 7,
+        "name": "Trái phiếu",
+        "options": []
+      }
+    ]
+  },
+  "market": [
+    {
+      "tab": "Tổng quan",
+      "filters": [
+        "Tất cả",
+        "HOSE",
+        "HNX",
+        "UPCOM"
+      ],
+      "chart": "Giao dịch nhà đầu tư nước ngoài"
+    },
+    {
+      "tab": "Cổ phiếu",
+      "filters": [
+        "Tất cả",
+        "HOSE",
+        "HNX",
+        "UPCOM"
+      ],
+      "sections": [
+        "Khối lượng đột biến",
+        "Khối lượng lớn nhất",
+        "Tăng mạnh nhất",
+        "Giảm mạnh nhất"
+      ]
+    },
+    {
+      "tab": "Phái sinh",
+      "filters": [],
+      "sections": [
+        "Chỉ số",
+        "Trái phiếu chính phủ"
+      ]
+    },
+    {
+      "tab": "Chứng quyền",
+      "filters": [],
+      "sections": [
+        "Khối lượng lớn nhất",
+        "Tăng mạnh nhất",
+        "Giảm mạnh nhất"
+      ]
+    },
+    {
+      "tab": "ETFs",
+      "filters": [],
+      "sections": []
+    }
+  ],
+  "search": [
+    {
+      "category": "Chứng khoán",
+      "keyword": "BSI",
+      "expectContains": "BSI"
+    },
+    {
+      "category": "Tin tức",
+      "keyword": "BSI",
+      "expectContains": "BSI"
+    },
+    {
+      "category": "Chức năng",
+      "keyword": "Chuyển",
+      "expectContains": "Chuyển tiền nội bộ"
+    },
+    {
+      "category": "Chức năng",
+      "keyword": "lệnh",
+      "expectContains": "Sổ lệnh"
+    }
+  ],
+  "marketFeatures": {
+    "_comment": "Thị trường > Tổng quan: chức năng nổi bật (label -> kiểu kiểm tra), tab của các màn Xem thêm. Chỉ mở / xem, không lưu thay đổi.",
+    "quickActions": [
+      {
+        "label": "SmartOTP",
+        "expect": "dialog|SmartOTP",
+        "note": "Thiết bị chưa đặt khoá màn hình: hộp 'Cấp quyền' (Bỏ qua/Chấp nhận) -> bấm Bỏ qua"
+      },
+      {
+        "label": "Mở tài khoản",
+        "expect": "title|Mở tài khoản EKYC"
+      },
+      {
+        "label": "Khuyến nghị",
+        "expect": "priceboard|Khuyến nghị"
+      },
+      {
+        "label": "Nộp tiền",
+        "expect": "sheet|Nộp tiền vào TKCK"
+      },
+      {
+        "label": "Lịch sự kiện",
+        "expect": "title|Lịch sự kiện"
+      },
+      {
+        "label": "Danh mục",
+        "expect": "tab|Danh mục"
+      },
+      {
+        "label": "Đồ thị",
+        "expect": "chart|"
+      },
+      {
+        "label": "Tuỳ chỉnh",
+        "expect": "title|Cài đặt chức năng nổi bật"
+      }
+    ],
+    "featuredSettingsItems": [
+      "SmartOTP",
+      "Mở tài khoản",
+      "Khuyến nghị",
+      "Nộp tiền",
+      "Lịch sự kiện",
+      "Danh mục",
+      "Đồ thị"
+    ],
+    "heatmap": {
+      "button": "Xem bản đồ nhiệt",
+      "title": "Biểu đồ nhiệt khối ngoại",
+      "filters": [
+        "Tất cả",
+        "HOSE",
+        "HNX",
+        "UPCOM"
+      ]
+    },
+    "lists": [
+      {
+        "section": "Tin tức",
+        "title": "Danh sách tin tức",
+        "tabs": [
+          "Tất cả",
+          "Thị trường Chứng khoán",
+          "Tin BSC",
+          "Tài chính - Ngân hàng",
+          "Kinh tế đầu tư",
+          "Kinh tế thế giới",
+          "Bất động sản"
+        ]
+      },
+      {
+        "section": "Phân tích",
+        "title": "Danh sách tin phân tích",
+        "tabs": [
+          "Tất cả",
+          "Ngày",
+          "Vĩ mô",
+          "Ngành",
+          "Doanh nghiệp"
+        ]
+      },
+      {
+        "section": "Lịch sự kiện",
+        "title": "Lịch sự kiện",
+        "tabs": []
+      }
+    ]
+  }
+}

@@ -117,6 +117,40 @@ public class LoginFlow {
      * The framework taps "Đăng nhập" once both fields are filled and the keyboard is closed; if the user
      * taps it themselves (or completes an OTP step) that is accepted too.
      */
+    /**
+     * Excel No.1 exactly: Menu -> Đăng nhập -> Đăng nhập tài khoản khác -> clear username -> username/password
+     * "trong file cài đặt" (.env) -> Đăng nhập. Without credentials in .env the tester types them ({@link #loginManually()}).
+     */
+    @Step("Đăng nhập qua Menu bằng tài khoản khác")
+    public MarketScreen loginViaMenuWithOtherAccount() {
+        if (!AppConfig.hasCredentials()) {
+            return loginManually();
+        }
+        openLoginViaMenu();
+        loginScreen.useFullForm();
+        loginScreen.clearUsername();
+        loginScreen.enterUsername(AppConfig.username());
+        loginScreen.enterPassword(AppConfig.password());
+        loginScreen.tapLogin();
+        boolean ok = WaitUtils.condition(() -> {
+            if (isLoggedInNow()) {
+                return true;
+            }
+            if (dialog.isShown(Duration.ofMillis(300))) {
+                String msg = dialog.getMessage();
+                dismissDialogIfAny();
+                if (loginScreen.isDisplayed(Duration.ofSeconds(1))) {
+                    throw new AssertionError("Đăng nhập thất bại: " + msg);
+                }
+            }
+            return false;
+        }, AppConfig.appLaunchTimeout());
+        if (!ok) {
+            throw new AssertionError("Login did not reach the main screen");
+        }
+        return new MarketScreen();
+    }
+
     @Step("Đăng nhập (người dùng tự nhập username/password trên điện thoại)")
     public MarketScreen loginManually() {
         openLoginViaMenu();
@@ -221,7 +255,7 @@ public class LoginFlow {
 
     private boolean isOurAppInFront() {
         try {
-            return AppConfig.appPackage().equals(DriverManager.getDriver().getCurrentPackage());
+            return vn.bsc.automation.core.driver.DeviceActions.isAppInForeground();
         } catch (Exception e) {
             return false;
         }
@@ -229,9 +263,7 @@ public class LoginFlow {
 
     private void hideKeyboardSilently() {
         try {
-            if (DriverManager.getDriver().isKeyboardShown()) {
-                DriverManager.getDriver().hideKeyboard();
-            }
+            vn.bsc.automation.core.driver.DeviceActions.hideKeyboard();
         } catch (Exception ignored) {
         }
     }

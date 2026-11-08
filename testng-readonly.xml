@@ -1,0 +1,19 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- Read-only checks (no logout, no orders). Order form / conditional form / menu / dry-run removed by user 07/11/2026: covered by the real-transaction suites. -->
+<suite name="BSC Read-only (all)" verbose="1">
+    <listeners>
+        <listener class-name="vn.bsc.automation.listeners.TestListener"/>
+        <listener class-name="vn.bsc.automation.listeners.RetryTransformer"/>
+    </listeners>
+    <test name="Read-only" preserve-order="true">
+        <classes>
+            <class name="vn.bsc.automation.tests.navigation.NavigationTest"/>
+            <class name="vn.bsc.automation.tests.market.MarketDataTest"/>
+            <class name="vn.bsc.automation.tests.market.MarketFeatureTest"/>
+            <class name="vn.bsc.automation.tests.priceboard.PriceBoardTest"/>
+            <class name="vn.bsc.automation.tests.order.TradingInfoTest"/>
+            <class name="vn.bsc.automation.tests.search.SearchTest"/>
+            <class name="vn.bsc.automation.tests.search.StockDetailTest"/>
+        </classes>
+    </test>
+</suite>

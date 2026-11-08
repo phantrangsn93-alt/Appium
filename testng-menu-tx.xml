@@ -1,0 +1,8 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd">
+<!-- REAL menu transactions (UAT), top -> bottom from the open menu. Data: testdata/menu_transactions.csv -->
+<suite name="BSC Menu transactions" verbose="1">
+    <listeners><listener class-name="vn.bsc.automation.listeners.TestListener"/></listeners>
+    <test name="Menu transactions" preserve-order="true">
+        <classes><class name="vn.bsc.automation.tests.menu.MenuTransactionTest"/></classes>
+    </test>
+</suite>

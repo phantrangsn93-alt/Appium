@@ -22,6 +22,9 @@ public abstract class LoggedInBaseTest extends BaseTest {
     /** Every test starts from a main screen with no dialog open (test independence). */
     @BeforeMethod(alwaysRun = true)
     public void backToMainScreen() {
+        if (keepScreenBetweenTests()) {
+            return; // e.g. menu transactions run one after another from the open menu
+        }
         AlertDialog dialog = new AlertDialog();
         BottomNavBar nav = new BottomNavBar();
         for (int i = 0; i < 3; i++) {
@@ -42,6 +45,11 @@ public abstract class LoggedInBaseTest extends BaseTest {
         }
         DriverFactory.ensureAppInForeground();
         loginFlow.ensureLoggedIn();
+    }
+
+    /** Override to true to NOT return to the main screen before each test (suite manages its own state). */
+    protected boolean keepScreenBetweenTests() {
+        return false;
     }
 
     /** Skips (not fails) a check that needs the account from .env. */

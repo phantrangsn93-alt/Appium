@@ -42,6 +42,55 @@ public class TransactionFormScreen extends MenuTargetScreen {
         return this;
     }
 
+    /**
+     * Types the amount with REAL key events (Flutter fields ignore setText - the value would look filled but be
+     * empty for the app) and closes the keyboard with the IME "done" action (never BACK: it would leave the form).
+     */
+    @Step("Nhập số tiền / khối lượng: {amount}")
+    public TransactionFormScreen typeAmount(String amount) {
+        org.openqa.selenium.WebElement field = find(AMOUNT);
+        vn.bsc.automation.core.driver.DeviceActions.tap(field);
+        vn.bsc.automation.core.driver.DeviceActions.typeKeys(field, amount);
+        try {
+            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
+                vn.bsc.automation.core.driver.DeviceActions.keyboardDone();
+            }
+        } catch (Exception ignored) {
+            // keyboard already closed
+        }
+        return this;
+    }
+
+    public String amountText() {
+        return getText(AMOUNT);
+    }
+
+    /**
+     * REAL transaction: form "Xác nhận" -> summary sheet "Xác nhận thông tin" -> its "Xác nhận"
+     * (+ PIN when the app asks for it; "Đã xác thực" = PIN remembered for the session).
+     */
+    @Step("Xác nhận giao dịch")
+    public void submit() {
+        scrollTo(CONFIRM);
+        tap(CONFIRM);
+        By summary = Locators.descStartsWith("Xác nhận thông tin");
+        if (isVisible(summary, java.time.Duration.ofSeconds(8))) {
+            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Xác nhận thông tin - " + title());
+            java.util.List<vn.bsc.automation.core.utils.UiNode> nodes =
+                    vn.bsc.automation.core.utils.UiNode.snapshot(driver().getPageSource());
+            vn.bsc.automation.core.utils.UiNode btn = nodes.stream()
+                    .filter(n -> "Xác nhận".equals(n.desc()) && n.clickable())
+                    .max(java.util.Comparator.comparingInt(vn.bsc.automation.core.utils.UiNode::y))
+                    .orElseThrow(() -> new AssertionError("Nút Xác nhận trên màn Xác nhận thông tin không thấy"));
+            vn.bsc.automation.core.utils.GestureUtils.tap(btn.x() + btn.width() / 2, btn.y() + btn.height() / 2);
+            // PIN step (only when the app asks for it)
+            vn.bsc.automation.screens.components.OrderConfirmDialog pin = new vn.bsc.automation.screens.components.OrderConfirmDialog();
+            if (isVisible(vn.bsc.automation.core.utils.Locators.passwordField(), java.time.Duration.ofSeconds(2))) {
+                pin.enterPinAndConfirm("Giao dịch " + title());
+            }
+        }
+    }
+
     /** Submits the transaction (REAL on the connected environment). */
     @Step("Bấm Xác nhận")
     public void tapConfirm() {

@@ -12,6 +12,7 @@
 # validity: DAY (Trong ngày, mặc định) | GTC (Nhiều ngày)
 # triggerPrice: STOP_LIMIT / OCO - "Giá kích hoạt" (vd HINT+0.5 = Giá gợi ý + 0.5)
 # amplitude / priceStep: TRAILING_STOP - "Biên độ" / "Bước giá"
+# Lệnh điều kiện: app tự điền "Giá đặt" = giá kích hoạt + 0.1 -> giá kích hoạt phải cách trần đủ xa (HINT+0.2), nếu không bị "Giá phải nằm trong khoảng trần sàn".
 id,enabled,excelNo,description,subAccount,side,exchange,symbol,orderType,price,quantity,session,outOfSession,validity,triggerPrice,amplitude,priceStep
 EX02_LO,true,7,Đặt lệnh LO lô chẵn,CO_SO,BUY,HOSE,AAA,LO,REF,100,TRADING,ANY,DAY,,,
 ODD_HOSE,true,8,Đặt lệnh LO lô lẻ,CO_SO,BUY,HOSE,AAA,ODDLOT,REF,1,CONTINUOUS,REJECT,DAY,,,
@@ -19,12 +20,12 @@ EX03_ATO,true,9,Đặt lệnh ATO,CO_SO,BUY,HOSE,AAA,ATO,,100,ATO,REJECT,DAY,,,
 EX04_MTL,true,10,Đặt lệnh MTL,CO_SO,BUY,HOSE,AAA,MTL,,100,CONTINUOUS,REJECT,DAY,,,
 EX05_ATC,true,11,Đặt lệnh ATC,CO_SO,BUY,HOSE,AAA,ATC,,100,ATC,REJECT,DAY,,,
 EX09_LO_GTC,true,15,Đặt lệnh LO-GTC,CO_SO,BUY,HOSE,AAA,LO,REF,100,ANY,ANY,GTC,,,
-EX10_SL_DAY,true,16,Đặt lệnh Stop limit trong ngày,CO_SO,BUY,HOSE,AAA,STOP_LIMIT,,100,ANY,ANY,DAY,HINT+0.5,,
-EX11_SL_GTC,true,17,Đặt lệnh Stop limit nhiều ngày,CO_SO,BUY,HOSE,AAA,STOP_LIMIT,,100,ANY,ANY,GTC,HINT+0.5,,
+EX10_SL_DAY,true,16,Đặt lệnh Stop limit trong ngày,CO_SO,BUY,HOSE,AAA,STOP_LIMIT,HINT+0.1,100,ANY,ANY,DAY,HINT+0.2,,
+EX11_SL_GTC,true,17,Đặt lệnh Stop limit nhiều ngày,CO_SO,BUY,HOSE,AAA,STOP_LIMIT,HINT+0.1,100,ANY,ANY,GTC,HINT+0.2,,
 EX12_TS_DAY,true,18,Đặt lệnh Trailing Stop trong ngày,CO_SO,BUY,HOSE,AAA,TRAILING_STOP,,100,ANY,ANY,DAY,,0.1,0.1
 EX13_TS_GTC,true,19,Đặt lệnh Trailing Stop nhiều ngày,CO_SO,BUY,HOSE,AAA,TRAILING_STOP,,100,ANY,ANY,GTC,,0.1,0.1
-EX14_OCO_DAY,true,20,Đặt lệnh OCO trong ngày,CO_SO,BUY,HOSE,AAA,OCO,HINT-0.5,100,ANY,ANY,DAY,HINT+0.5,,
-EX15_OCO_GTC,true,21,Đặt lệnh OCO nhiều ngày,CO_SO,BUY,HOSE,AAA,OCO,HINT-0.5,100,ANY,ANY,GTC,HINT+0.5,,
+EX14_OCO_DAY,true,20,Đặt lệnh OCO trong ngày,CO_SO,BUY,HOSE,AAA,OCO,HINT-0.5,100,ANY,ANY,DAY,HINT+0.2,,
+EX15_OCO_GTC,true,21,Đặt lệnh OCO nhiều ngày,CO_SO,BUY,HOSE,AAA,OCO,HINT-0.5,100,ANY,ANY,GTC,HINT+0.2,,
 ODD_HNX,false,,Lô lẻ HNX,CO_SO,BUY,HNX,TNG,ODDLOT,REF,1,CONTINUOUS,REJECT,DAY,,,
 ODD_UPCOM,false,,Lô lẻ UPCOM,CO_SO,BUY,UPCOM,ACV,ODDLOT,REF,1,CONTINUOUS,REJECT,DAY,,,
 HNX_MOK,false,,HNX lệnh MOK,CO_SO,BUY,HNX,TNG,MOK,,100,CONTINUOUS,REJECT,DAY,,,
