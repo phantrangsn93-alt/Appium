@@ -1,0 +1,125 @@
+{
+  "_comment": "Production run 10/11/2026 - account owner authorized all transactions (money 10,000 VND), OTP typed by the owner.",
+  "project": "BSC Mobile Trading – Kiểm thử tự động (Appium)",
+  "documentId": "BSC-MT-TSR",
+  "documentVersion": "1.0",
+  "preparedBy": "BA Team",
+  "organization": "BSC – BIDV Securities",
+  "testLevel": "Kiểm thử hệ thống (System test) – giao diện ứng dụng di động",
+  "testType": "Kiểm thử chức năng, hồi quy (regression), smoke; tự động hoá bằng Appium + TestNG",
+  "objectives": [
+    "Thực thi giao dịch thật trên môi trường PRODUCTION theo uỷ quyền của chủ tài khoản: đặt/sửa/huỷ lệnh, lệnh điều kiện và giao dịch tiền trong Menu (10,000 VND).",
+    "Đánh giá khác biệt hành vi giữa production và UAT (OTP, giờ giao dịch, giao diện) và độ ổn định của framework trên production.",
+    "Bảo đảm không để lại lệnh chờ khớp sau khi kiểm thử."
+  ],
+  "inScope": [
+    "Tài khoản của chủ tài khoản, tiểu khoản MR90_BSC (số tiểu khoản che trong báo cáo). Phiên bản app 2.0.20.",
+    "Đặt lệnh LO lô chẵn/lô lẻ, ATO, MTL, ATC, LO nhiều ngày, Stop Limit, Trailing Stop, OCO (MUA AAA); Sửa KL, Huỷ, Huỷ tất cả.",
+    "Giao dịch tiền trong Menu 10,000 VND: chuyển tiền nội bộ / ra ngoài, nộp/rút phái sinh, nộp/rút CCP, phong toả/giải toả BIDV, chuyển chứng khoán 1 CP.",
+    "Kiểm tra tay (không có trong bảng kết quả tự động): Sao kê tiền, Lịch sử đặt lệnh, Thông tin cá nhân (chỉ xem)."
+  ],
+  "outOfScope": [
+    "Lệnh phái sinh và lệnh BÁN (không thuộc tiểu khoản / không có danh mục).",
+    "Vay, quyền mua, IPO, voucher, xác nhận lệnh online (chưa đủ dữ liệu / chưa khảo sát).",
+    "Kiểm thử chỉ đọc (Thị trường, Bảng giá...) – đã thực hiện riêng."
+  ],
+  "approach": [
+    "Cấu hình env=prod: không dùng tài khoản/PIN UAT trong .env; OTP do chủ tài khoản nhập trên điện thoại (chỉ lần đầu, sau đó \"Đã xác thực\").",
+    "Dữ liệu: testdata/orders.csv, order_actions.csv, menu_transactions_prod.csv (10,000 VND).",
+    "Sau khi chạy: rà Sổ lệnh và huỷ toàn bộ lệnh do test tạo (OrderCleanupTest theo giờ đặt từ 22:14).",
+    "Quy tắc nghiệp vụ (BA 10/11/2026): khi hệ thống đã mở cửa nhận lệnh, LO lô chẵn/lẻ, ATO, ATC được đặt ngoài phiên (chờ vào phiên); MTL chỉ trong phiên liên tục."
+  ],
+  "exitCriteria": {
+    "minExecutedPercent": 95,
+    "minPassPercent": 95,
+    "maxOpenCriticalDefects": 0,
+    "note": "Lỗi hệ thống luôn tính Không đạt."
+  },
+  "findings": [
+    {
+      "id": "P-01",
+      "severity": "Thấp",
+      "title": "Lệnh điều kiện: lần chạm MUA đầu tiên (ngay sau khi nhập giá bằng bàn phím số) không có phản hồi; chạm lần hai mới mở xác nhận",
+      "status": "Đã xử lý (framework)",
+      "note": "6/6 lệnh điều kiện đặt thành công khi chạm lại sau 10 giây. Đề nghị Dev xem trải nghiệm: nút MUA nên phản hồi ngay lần chạm đầu."
+    },
+    {
+      "id": "P-02",
+      "severity": "Thấp",
+      "title": "MTL ngoài phiên: nút Xác nhận bị khoá, không có thông báo lý do",
+      "status": "Đã xử lý",
+      "note": "Theo BA: MTL ngoài phiên bị từ chối là đúng → ĐẠT. App nên hiển thị lý do khi khoá nút Xác nhận."
+    },
+    {
+      "id": "P-03",
+      "severity": "Trung bình",
+      "title": "Form đặt lệnh giữ chế độ \"SỬA MUA\" cho lệnh đã bị huỷ",
+      "status": "Mở",
+      "note": "Sau khi lệnh đang sửa bị huỷ, form vẫn ở chế độ sửa đến khi bấm \"Huỷ\". Framework đã tự thoát chế độ sửa."
+    },
+    {
+      "id": "P-04",
+      "severity": "Thông tin",
+      "title": "Production hỏi chọn kênh OTP (\"Chọn kênh nhận mã SMS-OTP\") ở lệnh đầu tiên; UAT không có",
+      "status": "Đã xử lý",
+      "note": "Framework chờ người dùng nhập OTP."
+    },
+    {
+      "id": "P-05",
+      "severity": "Thông tin",
+      "title": "Chuyển tiền ra ngoài: \"Ngoài giờ giao dịch\" (23:13)",
+      "status": "Mở",
+      "note": "Chạy lại trong giờ. Ô tài khoản thụ hưởng là danh sách cần chọn (framework đã chọn tài khoản đầu tiên)."
+    },
+    {
+      "id": "P-06",
+      "severity": "Thấp",
+      "title": "Nộp ký quỹ CCP 10,000: \"Số tiền phải lớn hơn số tiền phí và VAT!\"",
+      "status": "Mở",
+      "note": "Cần số tiền lớn hơn mức phí để kiểm thử (chờ chủ tài khoản đồng ý)."
+    },
+    {
+      "id": "P-07",
+      "severity": "Trung bình",
+      "title": "Phong toả/Giải toả tiền @BIDV: \"Trạng thái corebank của tiểu khoản không hợp lệ!\"",
+      "status": "Mở",
+      "note": "Cần BA/vận hành xác nhận tiểu khoản có dùng được dịch vụ."
+    },
+    {
+      "id": "P-08",
+      "severity": "Thông tin",
+      "title": "Lô lẻ / ATO / ATC đặt ngoài phiên được nhận (đúng quy tắc BA)",
+      "status": "Đã xử lý",
+      "note": "orders.csv: outOfSession=ACCEPT. Đã chạy lại: ĐẠT."
+    },
+    {
+      "id": "P-09",
+      "severity": "Thông tin",
+      "title": "Production: LO nhiều ngày nằm ở tab \"Điều kiện\" (\"Chờ kích hoạt\"), chưa trừ sức mua; ATO/ATC hiển thị bằng giá (7.46) thay vì nhãn",
+      "status": "Đã xử lý (framework)",
+      "note": "Framework kiểm tra LO-GTC như lệnh điều kiện và khớp dòng ATO/ATC theo giá."
+    },
+    {
+      "id": "P-10",
+      "severity": "Thấp",
+      "title": "Dữ liệu OCO: giá chân LO = gợi ý − 0.5 nằm dưới giá sàn (\"Giá phải nằm trong khoảng trần sàn\")",
+      "status": "Đã xử lý",
+      "note": "Sửa dữ liệu thành gợi ý − 0.2; EX14 chạy lại ĐẠT. Validation của app đúng."
+    }
+  ],
+  "risks": [
+    "Mọi lệnh test đã huỷ: Sổ lệnh tab Chờ và Điều kiện không còn lệnh hiệu lực (kiểm tra 00:30 11/11/2026).",
+    "TX01 chuyển nội bộ 10,000 VND sang tiểu khoản đích mặc định – chưa chuyển ngược.",
+    "Chuyển tiền ra ngoài và chuyển chứng khoán chưa kiểm chứng trong giờ giao dịch; CCP cần số tiền lớn hơn phí."
+  ],
+  "recommendations": [
+    "Chạy lại lệnh điều kiện, chuyển tiền ra ngoài và chuyển chứng khoán trong giờ giao dịch.",
+    "BA xác nhận P-01, P-02, P-07.",
+    "Bổ sung TC tự động đối chiếu Sao kê tiền / Lịch sử đặt lệnh với giao dịch vừa thực hiện."
+  ],
+  "approvers": [
+    "Trưởng nhóm kiểm thử",
+    "Trưởng nhóm BA",
+    "Đại diện Dev / Sản phẩm"
+  ]
+}

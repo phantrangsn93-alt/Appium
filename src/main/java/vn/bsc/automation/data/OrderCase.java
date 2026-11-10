@@ -90,6 +90,14 @@ public record OrderCase(String id, boolean enabled, String excelNo, String descr
         return CONDITIONAL_TYPES.contains(orderType);
     }
 
+    /**
+     * Listed in the order book's "Điều kiện" tab with status "Chờ kích hoạt" and no buying-power hold until it is
+     * activated: conditional orders AND multi-day LO (LO-GTC) - seen on production 2.0.20.
+     */
+    public boolean inConditionalBook() {
+        return isConditional() || ("LO".equals(orderType) && validity == Validity.GTC);
+    }
+
     public boolean isOddLot() {
         return "ODDLOT".equals(orderType);
     }

@@ -69,10 +69,19 @@ public final class AppConfig {
 
     /** Order PIN (BSC_ORDER_PIN in .env). Null = tester types the PIN on the phone. Never log it. */
     public static String orderPin() {
-        return ConfigReader.get("bsc.order.pin");
+        return credentialsDisabled() ? null : ConfigReader.get("bsc.order.pin");
     }
 
     public static boolean hasCredentials() {
-        return ConfigReader.get("bsc.username") != null && ConfigReader.get("bsc.password") != null;
+        return !credentialsDisabled()
+                && ConfigReader.get("bsc.username") != null && ConfigReader.get("bsc.password") != null;
+    }
+
+    /**
+     * credentials.disabled=true (config-prod): ignore .env account/PIN entirely - the tester types PIN/OTP on the
+     * phone. A UAT password/PIN typed into the production app could lock a real account.
+     */
+    public static boolean credentialsDisabled() {
+        return ConfigReader.getBool("credentials.disabled", false);
     }
 }

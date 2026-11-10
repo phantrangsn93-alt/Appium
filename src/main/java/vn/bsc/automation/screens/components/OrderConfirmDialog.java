@@ -58,9 +58,11 @@ public class OrderConfirmDialog extends BaseScreen {
             } else {
                 log.warn("Không thấy ô nhập PIN trên màn xác nhận ({})", context);
             }
+        } else if (!isVisible(pinField, Duration.ofSeconds(2))) {
+            log.info("Không có ô PIN/OTP (Đã xác thực) - bấm Xác nhận luôn: {}", context);
         } else {
             ManualInput.waitForUser("Nhập mã PIN trên điện thoại cho: " + context + " (rồi ẩn bàn phím hoặc tự bấm Xác nhận)",
-                    () -> !isDisplayed(Duration.ofMillis(300)) || isPinTyped());
+                    () -> isPinTyped() || sheetReallyClosed());
             closeKeyboardWithoutBack();
         }
         tapConfirmWhenEnabled(context);
@@ -128,7 +130,34 @@ public class OrderConfirmDialog extends BaseScreen {
             vn.bsc.automation.core.utils.GestureUtils.scrollBy(0.15);
         }
         AllureUtils.attachScreenshot("Nút Xác nhận không bấm được - " + context);
-        throw new AssertionError("Nút 'Xác nhận' không khả dụng sau khi nhập PIN (" + context + ")");
+        throw new ConfirmDisabledException("Nút 'Xác nhận' không khả dụng sau khi nhập PIN (" + context + ")");
+    }
+
+    /**
+     * The sheet is gone for good: not displayed, no dialog on top of it (e.g. "Đã gửi OTP" after "Lấy OTP" hides the
+     * sheet's semantics), and still gone 1.5 s later.
+     */
+    private boolean sheetReallyClosed() {
+        AlertDialog overlay = new AlertDialog();
+        if (isDisplayed(Duration.ofMillis(300)) || overlay.isShown(Duration.ofMillis(300))) {
+            return false;
+        }
+        vn.bsc.automation.core.utils.WaitUtils.condition(() -> false, Duration.ofMillis(1500));
+        return !isDisplayed(Duration.ofMillis(300)) && !overlay.isShown(Duration.ofMillis(300));
+    }
+
+    /** The app keeps "Xác nhận" disabled: it refuses the order (e.g. MTL outside the continuous session). */
+    public static class ConfirmDisabledException extends AssertionError {
+        public ConfirmDisabledException(String message) {
+            super(message);
+        }
+    }
+
+    /** Closes the confirmation sheet without confirming (chevron at its top-right, else Back). */
+    public void dismiss() {
+        if (isDisplayed(Duration.ofMillis(500))) {
+            pressBack();
+        }
     }
 
     private boolean isPinTyped() {

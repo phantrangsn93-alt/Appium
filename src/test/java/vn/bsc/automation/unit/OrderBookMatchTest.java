@@ -76,4 +76,13 @@ public class OrderBookMatchTest {
         assertThat(OrderBookScreen.hasStatus(r, OrderBookScreen.placedStatus(stop))).isTrue();
         assertThat(OrderBookScreen.rowMatches(r, new OrderSpec("AAA", true, 100, null, "Trailing Stop", true))).isFalse();
     }
+
+    @org.testng.annotations.Test
+    public void atcRowShowingPriceMatchesVndPrice() {
+        vn.bsc.automation.core.utils.UiNode row = new vn.bsc.automation.core.utils.UiNode("android.view.View",
+                "AAA\nMUA\n7.46\n100\n● Chờ gửi", "", true, 0, 0, 1080, 120);
+        vn.bsc.automation.screens.OrderBookScreen.OrderSpec spec = new vn.bsc.automation.screens.OrderBookScreen.OrderSpec(
+                "AAA", true, 100, new java.math.BigDecimal("7460.00"), "ATC", false);
+        org.testng.Assert.assertTrue(vn.bsc.automation.screens.OrderBookScreen.rowMatches(row, spec));
+    }
 }

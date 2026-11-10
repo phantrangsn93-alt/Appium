@@ -188,15 +188,30 @@ public class OrderFormScreen extends BaseScreen {
         List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
         int tabsBottom = nodes.stream().filter(n -> "Lệnh mua".equals(n.desc()))
                 .mapToInt(n -> n.y() + n.height()).findFirst().orElseThrow(() -> new AssertionError("Mua/Bán tabs not visible"));
-        return nodes.stream()
+        java.util.Optional<UiNode> card = nodes.stream()
                 .filter(n -> n.clickable() && n.y() >= tabsBottom && n.desc().contains("\n")
                         && n.desc().split("\n")[0].trim().matches("[A-Z0-9]{3,12}"))
-                .min(Comparator.comparingInt(UiNode::y))
+                .min(Comparator.comparingInt(UiNode::y));
+        if (card.isPresent()) {
+            return card.get();
+        }
+        // Production 2.0.20 merges the card into the form container ("AAA\n\n\nHOSE\n6.98\n<name>...\nKL khớp lệnh...").
+        // Use that label and the card's area right below the Mua/Bán tabs.
+        return nodes.stream()
+                .filter(n -> n.y() < tabsBottom && n.height() > 600 && n.desc().contains("\n")
+                        && n.desc().split("\n")[0].trim().matches("[A-Z0-9]{3,12}"))
+                .findFirst()
+                // tap target = the symbol name at the left of the card (the right side holds prices)
+                .map(n -> new UiNode(n.className(), n.desc(), n.text(), true, n.x(), tabsBottom + 10, n.width() / 3, 120))
                 .orElseThrow(() -> new AssertionError("No symbol selected on the order form"));
     }
 
     @Step("Nhập mã chứng khoán: {symbol}")
     public OrderFormScreen typeSymbol(String symbol) {
+        if (!isVisible(symbolInput, Duration.ofSeconds(2))) {
+            // the form may still be scrolled down by a previous order (e.g. conditional section): back to the top
+            scrollToTop();
+        }
         if (!isVisible(symbolInput, Duration.ofSeconds(2))) {
             // A symbol is already selected: tapping its card re-opens the search input.
             tapNode(selectedCardNode());
@@ -224,7 +239,34 @@ public class OrderFormScreen extends BaseScreen {
         return this;
     }
 
+    /**
+     * The form stays in "modify" mode ("SỬA MUA : ..." + "Huỷ") when a modification was left unfinished (e.g. the
+     * order got cancelled meanwhile). "Huỷ" under it only leaves modify mode - it does not cancel any order.
+     */
+    public OrderFormScreen exitModifyMode() {
+        By modify = Locators.descRegex("(?:" + Locators.anyForm("SỬA ") + "|" + Locators.anyForm("Sửa ") + ")"
+                + "(?:MUA|BÁN|mua|bán|" + Locators.anyForm("BÁN") + "|" + Locators.anyForm("bán") + ").*");
+        if (isVisible(modify, Duration.ofSeconds(1))) {
+            org.openqa.selenium.Rectangle r = find(modify).getRect();
+            List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+            nodes.stream().filter(n -> "Huỷ".equals(n.desc()) || "Hủy".equals(n.desc()))
+                    .filter(n -> n.y() >= r.getY() + r.getHeight() - 5)
+                    .min(Comparator.comparingInt(UiNode::y))
+                    .ifPresent(n -> {
+                        log.warn("Form đặt lệnh đang ở chế độ sửa - bấm Huỷ để thoát");
+                        tapNode(n);
+                    });
+            WaitUtils.waitInvisible(modify, Duration.ofSeconds(5));
+        }
+        return this;
+    }
+
     public OrderFormScreen selectSymbol(String symbol) {
+        if (!isVisible(symbolInput, Duration.ofSeconds(1))
+                && Boolean.TRUE.equals(safe(() -> getSelectedStock().symbol().equals(symbol)))) {
+            log.info("Mã {} đã được chọn sẵn trên form - không nhập lại", symbol);
+            return this;
+        }
         return typeSymbol(symbol).chooseSuggestion(symbol);
     }
 
@@ -708,16 +750,37 @@ public class OrderFormScreen extends BaseScreen {
      */
     @Step("Chạm vào nút MUA/BÁN (lệnh thật)")
     public OrderConfirmDialog submitRealOrder() {
+        return submitRealOrder(isConditional());
+    }
+
+    /** @param conditional the order is a conditional one (known from the test data): longer wait for the sheet */
+    public OrderConfirmDialog submitRealOrder(boolean conditional) {
         if (!AppConfig.orderSubmitEnabled()) {
             throw new IllegalStateException("SAFETY GUARD: real orders are disabled. Run with -Dorder.submit.enabled=true");
         }
         By submit = currentSide() == Side.BUY ? buyButton : sellButton;
         scrollTo(submit);
         tap(submit);
+        if (conditional) {
+            WaitUtils.condition(() -> false, Duration.ofMillis(800));
+            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Ngay sau khi bấm MUA/BÁN (lệnh điều kiện)");
+        }
         OrderConfirmDialog confirm = new OrderConfirmDialog();
         AlertDialog error = new AlertDialog();
-        WaitUtils.condition(() -> confirm.isDisplayed(Duration.ofMillis(300)) || error.isShown(Duration.ofMillis(300)),
-                Duration.ofSeconds(15));
+        // conditional orders take longer on production before the sheet opens (validation round-trip)
+        // Conditional orders (production): the FIRST tap after typing a price on the keypad only takes the focus
+        // away from the field; the sheet opens on the second tap. Short wait, re-tap, then the long wait.
+        Duration open = conditional ? Duration.ofSeconds(10) : Duration.ofSeconds(15);
+        boolean opened = WaitUtils.condition(() -> confirm.isDisplayed(Duration.ofMillis(300))
+                || error.isShown(Duration.ofMillis(300)), open);
+        if (!opened && conditional) {
+            open = Duration.ofSeconds(ConfigReader_conditionalWait());
+            log.warn("Lệnh điều kiện: chưa mở xác nhận sau 10s - bấm {} lần nữa (chờ tối đa {}s)", submit, open.getSeconds());
+            scrollTo(submit);
+            tap(submit);
+            WaitUtils.condition(() -> confirm.isDisplayed(Duration.ofMillis(300))
+                    || error.isShown(Duration.ofMillis(300)), open);
+        }
         // Seen on UAT: the "Xác nhận đặt lệnh" sheet opens and an error dialog (e.g. E_SYSTEM_ERROR) pops up ON TOP
         // of it. The modal hides the sheet's semantics, so close the error first, then look for the sheet again.
         if (error.isShown(Duration.ofMillis(500))) {
@@ -736,6 +799,16 @@ public class OrderFormScreen extends BaseScreen {
     }
 
     private String lastPreConfirmError;
+
+    /** order.conditional.confirm.wait (seconds) - wait for the confirmation sheet of a conditional order. */
+    private static long ConfigReader_conditionalWait() {
+        return vn.bsc.automation.core.config.ConfigReader.getInt("order.conditional.confirm.wait", 60);
+    }
+
+    /** True when the form is on the "Điều kiện" order type (Stop Limit / Trailing Stop / OCO). */
+    private boolean isConditional() {
+        return isVisible(Locators.descMatchesAny("Giá kích hoạt", "Biên độ"), Duration.ofSeconds(1));
+    }
 
     /** Error that popped up over the confirmation sheet during the last {@link #submitRealOrder()} (null = none). */
     public String lastPreConfirmError() {

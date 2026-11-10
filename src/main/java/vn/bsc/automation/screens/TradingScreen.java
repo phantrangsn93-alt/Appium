@@ -56,7 +56,7 @@ public class TradingScreen extends BaseScreen {
         dismissTransientError();
         openTab(Tab.PLACE_ORDER);
         // The app keeps the form's scroll position between visits -> always start from the top
-        return new OrderFormScreen().scrollToTop().waitUntilLoaded();
+        return new OrderFormScreen().exitModifyMode().scrollToTop().waitUntilLoaded();
     }
 
     public OrderBookScreen openOrderBook() {

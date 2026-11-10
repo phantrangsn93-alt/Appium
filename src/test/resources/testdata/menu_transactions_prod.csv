@@ -1,0 +1,16 @@
+# PRODUCTION (config-prod): money 10,000 VND, stock transfer 1 CP - owner authorization 10/11/2026.
+id,enabled,menuItem,option,amount,note
+TX01,true,CHUYEN_TIEN,CHUYEN_TIEN_NOI_BO,10000,Thường -> MR90 BSC ĐB (tiểu khoản mặc định của form)
+TX02,true,CHUYEN_TIEN,CHUYEN_TIEN_RA_NGOAI,10000,Tài khoản ngân hàng thụ hưởng mặc định
+TX03,true,NOP_RUT_TIEN_PHAI_SINH,NOP_TIEN_PHAI_SINH,10000,
+TX04,true,NOP_RUT_TIEN_PHAI_SINH,RUT_TIEN_PHAI_SINH,10000,Hoàn tác TX03
+TX05,true,NOP_RUT_TIEN_CCP,NOP_KY_QUY_CCP,10000,
+TX06,true,NOP_RUT_TIEN_CCP,RUT_KY_QUY_CCP,10000,Hoàn tác TX05
+TX07,true,PHONG_GIAI_TOA_TIEN_BIDV,PHONG_TOA_TIEN,10000,
+TX08,true,PHONG_GIAI_TOA_TIEN_BIDV,GIAI_TOA_TIEN,10000,Hoàn tác TX07
+TX09,false,CHO_VAY,,10000,Cần khảo sát luồng Tạo mới hợp đồng
+TX10,true,CHUYEN_CHUNG_KHOAN,,1,Chuyển 100 CP giữa tiểu khoản (mã mặc định của form)
+TX11,false,DANG_KY_QUYEN_MUA,,10000,Cần có quyền mua khả dụng trên tài khoản
+TX12,false,DANG_KY_MUA_CW_IPO,,10000,Cần có đợt IPO đang mở
+TX13,false,DANG_KY_VOUCHER,,,Cần khảo sát luồng nhận ưu đãi
+TX14,false,XAC_NHAN_LENH_ONLINE,,,Cần có lệnh chờ xác nhận

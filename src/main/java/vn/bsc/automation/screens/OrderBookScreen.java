@@ -100,7 +100,7 @@ public class OrderBookScreen extends BaseScreen {
          */
         public static OrderSpec of(PlacedOrder o) {
             boolean buy = o.source().side() == vn.bsc.automation.data.OrderCase.Side.BUY;
-            if (o.source().isConditional()) {
+            if (o.source().inConditionalBook()) {
                 return new OrderSpec(o.source().symbol(), buy, o.quantity(), null, conditionalLabel(o.source().orderType()), true);
             }
             return new OrderSpec(o.source().symbol(), buy, o.quantity(), o.price(),
@@ -112,6 +112,7 @@ public class OrderBookScreen extends BaseScreen {
                 case "STOP_LIMIT" -> "Stop Limit";
                 case "TRAILING_STOP" -> "Trailing Stop";
                 case "OCO" -> "OCO";
+                case "LO" -> "Limit"; // LO-GTC row in the "Điều kiện" tab: "AAA | MUA | Limit | 100 | ● Chờ kích hoạt"
                 default -> type;
             };
         }
@@ -142,10 +143,10 @@ public class OrderBookScreen extends BaseScreen {
                 : l.stream().anyMatch(x -> x.equals("B") || x.equalsIgnoreCase("Bán"));
         boolean qty = l.contains(qtyText(o.quantity())) || l.contains(String.valueOf(o.quantity()));
         boolean price = true;
-        if (o.price() != null) {
-            price = priceTexts(o.price()).stream().anyMatch(l::contains);
-        } else if (o.priceLabel() != null) {
-            price = l.contains(o.priceLabel());
+        if (o.price() != null || o.priceLabel() != null) {
+            // ATO/ATC rows show either the type label or the price (production: "AAA | MUA | 7.46 | 100")
+            price = (o.priceLabel() != null && l.contains(o.priceLabel()))
+                    || (o.price() != null && priceTexts(o.price()).stream().anyMatch(l::contains));
         }
         return side && qty && price;
     }
@@ -153,10 +154,17 @@ public class OrderBookScreen extends BaseScreen {
     /** Price as it may be displayed: 7.53 / 7.5 / 7,530 (x1000) / 1,867.40. */
     static List<String> priceTexts(java.math.BigDecimal p) {
         java.text.DecimalFormat grouped2 = new java.text.DecimalFormat("#,##0.00", java.text.DecimalFormatSymbols.getInstance(Locale.US));
-        return List.of(p.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
+        List<String> out = new java.util.ArrayList<>(List.of(p.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
                 p.stripTrailingZeros().toPlainString(),
                 grouped2.format(p),
-                NumberFormat.getIntegerInstance(Locale.US).format(p.multiply(java.math.BigDecimal.valueOf(1000))));
+                NumberFormat.getIntegerInstance(Locale.US).format(p.multiply(java.math.BigDecimal.valueOf(1000)))));
+        if (p.compareTo(java.math.BigDecimal.valueOf(1000)) >= 0) {
+            // price taken from a message in VND ("giá 7,460.00") while the book shows x1000 ("7.46")
+            java.math.BigDecimal k = p.divide(java.math.BigDecimal.valueOf(1000));
+            out.add(k.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
+            out.add(k.stripTrailingZeros().toPlainString());
+        }
+        return out;
     }
 
     /** Status line looks like "● Chờ kích hoạt" (dot prefix): match by find(), not on the whole line. */
@@ -213,7 +221,8 @@ public class OrderBookScreen extends BaseScreen {
     /** The ACTIVE row of the order (never an "Đã sửa"/"Đã huỷ" history row of the same order). */
     public UiNode findRow(PlacedOrder o) {
         OrderSpec spec = OrderSpec.of(o);
-        selectFilter(o.source().isConditional() ? "Điều kiện" : "Tất cả");
+        // "Chờ" lists only live orders: in "Tất cả" identical cancelled rows of earlier runs hide the active one
+        selectFilter(o.source().inConditionalBook() ? "Điều kiện" : "Chờ");
         // the list reloads after the filter tap: wait until the order's rows are there
         vn.bsc.automation.core.utils.WaitUtils.condition(
                 () -> orderRows().stream().anyMatch(r -> rowMatches(r, spec)), Duration.ofSeconds(8));
@@ -386,7 +395,8 @@ public class OrderBookScreen extends BaseScreen {
         } catch (AssertionError e) {
             log.info("Modify form: price/quantity not readable ({}), using expected values", e.getMessage());
         }
-        tap(Locators.descRegex(Locators.anyForm("Sửa ") + ".+")); // "Sửa mua" / "Sửa bán" (Excel: "Sửa bán")
+        // "Sửa mua" / "Sửa bán" (UAT) or "SỬA MUA : 1,396,000" (production 2.0.20)
+        tap(Locators.descRegex("(?:" + Locators.anyForm("Sửa ") + "|" + Locators.anyForm("SỬA ") + ").+"));
         new OrderConfirmDialog().waitUntilLoaded();
         new OrderConfirmDialog().enterPinAndConfirm("Sửa lệnh " + o.source().id());
         return new Modified(newPrice, qty);

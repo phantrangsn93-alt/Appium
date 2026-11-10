@@ -46,7 +46,10 @@ public class MenuTransactionTest extends LoggedInBaseTest {
 
     @DataProvider(name = "tx")
     public Object[][] tx() {
-        return MenuTransactionCase.load("testdata/menu_transactions.csv").stream()
+        // menu.tx.file: e.g. config-prod uses menu_transactions_prod.csv (10,000 VND)
+        String file = vn.bsc.automation.core.config.ConfigReader.get("menu.tx.file", "testdata/menu_transactions.csv");
+        String include = vn.bsc.automation.core.config.ConfigReader.get("menu.tx.include", ".*"); // regex on id
+        return MenuTransactionCase.load(file).stream().filter(c -> c.id().matches(include))
                 .map(c -> new Object[]{c}).toArray(Object[][]::new);
     }
 
@@ -94,6 +97,10 @@ public class MenuTransactionTest extends LoggedInBaseTest {
         Allure.addAttachment("Form", c.toString());
         vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Form " + c.id());
 
+        if ("CHUYEN_TIEN_RA_NGOAI".equals(c.option())) {
+            // beneficiary account is a dropdown (not pre-filled): pick the first registered account
+            form.selectFirstOptionIfEmpty("Số tài khoản ngân hàng");
+        }
         form.typeAmount(c.amount());
         form.submit();
         Outcome out = resultReader.readResult(null);

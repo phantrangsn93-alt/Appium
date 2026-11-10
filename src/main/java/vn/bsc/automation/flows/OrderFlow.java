@@ -176,7 +176,7 @@ public class OrderFlow {
         } catch (AssertionError e) {
             AllureUtils.attachText("Không đọc được số dư trước khi đặt", e.getMessage());
         }
-        OrderConfirmDialog confirm = f.form().submitRealOrder();
+        OrderConfirmDialog confirm = f.form().submitRealOrder(c.isConditional());
         String preError = f.form().lastPreConfirmError();
         if (confirm == null) {
             // no confirmation sheet at all: the app rejected the order right away
@@ -185,7 +185,13 @@ public class OrderFlow {
                     : readResult(f.price()).withBalance(before);
         }
         // Excel steps 9-10 even if an error popped up over the sheet: PIN -> Xác nhận -> final result decides
-        confirm.enterPinAndConfirm("Đặt lệnh " + c.id());
+        try {
+            confirm.enterPinAndConfirm("Đặt lệnh " + c.id());
+        } catch (OrderConfirmDialog.ConfirmDisabledException disabled) {
+            // the app does not allow the order (e.g. MTL outside the continuous session): a refusal, not a test error
+            confirm.dismiss();
+            return new Outcome(false, "Hệ thống không cho xác nhận lệnh (nút Xác nhận bị khoá)", f.price(), before);
+        }
         Outcome result = readResult(f.price()).withBalance(before);
         if (preError != null && !result.success()) {
             return new Outcome(false, "Trước khi nhập PIN: " + preError + " | Sau khi xác nhận: " + result.message(),
@@ -274,5 +280,16 @@ public class OrderFlow {
             }
         }
         return new Outcome(SUCCESS.matcher(msg).matches(), msg, price);
+    }
+
+    /** Price in a success message ("... giá 7,460.00 thành công!" / "giá 6.98"); null when absent. */
+    public static BigDecimal priceFromMessage(String message) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("giá\\s+([0-9][0-9.,]*)").matcher(message == null ? "" : message);
+        if (!m.find()) {
+            return null;
+        }
+        String t = m.group(1).replaceAll("[.,]$", "");
+        // "7,460.00" (VND, comma = thousands) or "6.98" (x1000)
+        return new BigDecimal(t.replace(",", ""));
     }
 }

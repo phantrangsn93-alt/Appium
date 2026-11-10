@@ -110,7 +110,9 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         }
         PlacedOrder placed = null;
         if (out.success()) {
-            placed = new PlacedOrder(c, c.subAccountName(), out.price(), c.quantity(), LocalDateTime.now(), out.message());
+            // ATO/ATC/MTL have no price on the form: take it from "Đặt mua AAA KL 100 giá 7,460.00 thành công!"
+            java.math.BigDecimal price = out.price() != null ? out.price() : OrderFlow.priceFromMessage(out.message());
+            placed = new PlacedOrder(c, c.subAccountName(), price, c.quantity(), LocalDateTime.now(), out.message());
             OrderRegistry.register(placed);
         }
         LOG.info("[{}] inSession={} success={} message='{}'", c.id(), inSession, out.success(), out.message());
@@ -229,14 +231,14 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         }
 
         OrderBookScreen.OrderSpec spec = OrderBookScreen.OrderSpec.of(placed);
-        String expected = c.isConditional() ? "Chờ kích hoạt" : "Đã gửi/Chờ gửi";
+        String expected = c.inConditionalBook() ? "Chờ kích hoạt" : "Đã gửi/Chờ gửi";
         Optional<UiNode> row = navigator.openTrading().openOrderBook()
                 .waitFor(spec, OrderBookScreen.placedStatus(spec), BOOK_TIMEOUT);
         row.ifPresent(r -> Allure.addAttachment("Dòng lệnh trong Sổ lệnh", OrderBookScreen.text(r)));
         soft.assertThat(row).as("[%s] (2) Sổ lệnh có lệnh %s với trạng thái %s", c.id(), spec, expected).isPresent();
 
         // (3) only NORMAL orders block balance; conditional orders are not checked (business rule)
-        boolean checkBalance = !c.isConditional();
+        boolean checkBalance = !c.inConditionalBook();
         if (checkBalance && out.balanceBefore() != null) {
             long before = out.balanceBefore();
             long after = orderFlow.readBalanceAfter(c, before, BALANCE_TIMEOUT);
@@ -257,7 +259,7 @@ public class ExcelOrderTest extends LoggedInBaseTest {
     /** Book identity of a row BEFORE the price is known (normal orders: any price). */
     private static OrderBookScreen.OrderSpec probeSpec(OrderCase c) {
         boolean buy = c.side() == OrderCase.Side.BUY;
-        if (c.isConditional()) {
+        if (c.inConditionalBook()) {
             return new OrderBookScreen.OrderSpec(c.symbol(), buy, c.quantity(), null,
                     OrderBookScreen.OrderSpec.conditionalLabel(c.orderType()), true);
         }

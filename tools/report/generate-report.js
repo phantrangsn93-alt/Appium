@@ -4,6 +4,7 @@
  *
  * Usage (from the project root):
  *   node tools/report/generate-report.js [testng-results.xml | allure-results-dir ...] [--out reports/x.docx] [--title "Đợt A"]
+ *        [--meta tools/report/report-meta-prod.json] [--env PROD]
  * Defaults: input = target/surefire-reports/testng-results.xml, output = reports/BSC_TestSummaryReport_<ts>.docx
  * Several result files can be given (e.g. archived runs of phase A, unit tests, phase B): they are merged,
  * the LAST execution of each test case wins (re-runs supersede earlier attempts, retried attempts are ignored).
@@ -19,16 +20,19 @@ const {
 } = require('docx');
 
 // ------------------------------------------------------------------ args
+let metaFile = null, envOverride = null; // --meta <file>, --env <name>
 const args = process.argv.slice(2);
 const inputs = [];
 let out = null, runTitle = null;
 for (let i = 0; i < args.length; i++) {
   if (args[i] === '--out') out = args[++i];
   else if (args[i] === '--title') runTitle = args[++i];
+  else if (args[i] === '--meta') metaFile = args[++i];
+  else if (args[i] === '--env') envOverride = args[++i];
   else inputs.push(args[i]);
 }
 if (inputs.length === 0) inputs.push('target/surefire-reports/testng-results.xml');
-const meta = JSON.parse(fs.readFileSync(path.join(__dirname, 'report-meta.json'), 'utf8'));
+const meta = JSON.parse(fs.readFileSync(metaFile || path.join(__dirname, 'report-meta.json'), 'utf8'));
 const now = new Date();
 const pad = n => String(n).padStart(2, '0');
 const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}`;
@@ -164,7 +168,7 @@ const adb = `${process.env.ANDROID_HOME || envVal('ANDROID_HOME') || process.env
 const appVersion = (sh(`${adb} shell dumpsys package com.bsc.mobiletrading`).match(/versionName=(\S+)/) || [])[1] || 'không xác định';
 const model = sh(`${adb} shell getprop ro.product.model`) || 'không xác định';
 const android = sh(`${adb} shell getprop ro.build.version.release`) || '?';
-const environment = (envVal('ENV') || 'sit').toUpperCase();
+const environment = (envOverride || envVal('ENV') || 'sit').toUpperCase();
 const appium = sh('appium --version') || '3.9.0';
 
 // ------------------------------------------------------------------ docx helpers
