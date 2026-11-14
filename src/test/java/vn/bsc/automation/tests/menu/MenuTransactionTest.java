@@ -80,6 +80,72 @@ public class MenuTransactionTest extends LoggedInBaseTest {
         if (!AppConfig.orderSubmitEnabled()) {
             throw new SkipException("Giao dịch thật đang khoá (order.submit.enabled=false)");
         }
+        TransactionFormScreen form = openForm(c);
+        Allure.addAttachment("Form", c.toString());
+        vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Form " + c.id());
+
+        if ("CHUYEN_TIEN_RA_NGOAI".equals(c.option())) {
+            // beneficiary account is a dropdown (not pre-filled): pick the first registered account
+            form.selectFirstOptionIfEmpty("Số tài khoản ngân hàng");
+        }
+        // sending / receiving sub-accounts from config (empty = the form's defaults)
+        selectConfigured(form, "menu.tx.from.subaccount", "Tiểu khoản chuyển", "Tiểu khoản", "Từ tiểu khoản");
+        if ("CHUYEN_TIEN_NOI_BO".equals(c.option()) || "CHUYEN_CHUNG_KHOAN".equals(c.menuItem())) {
+            selectConfigured(form, "menu.tx.to.subaccount", "Tiểu khoản nhận", "Tiểu khoản đích", "Đến tiểu khoản");
+        }
+        boolean money = !"CHUYEN_CHUNG_KHOAN".equals(c.menuItem());
+        Long before = money ? form.maxTransferable() : null; // balance of the SENDING (sub-)account
+        String receiver = "CHUYEN_TIEN_NOI_BO".equals(c.option())
+                ? form.firstFieldValue("Tiểu khoản nhận", "Tiểu khoản đích", "Đến tiểu khoản", "Tiểu khoản chuyển đến") : null;
+        if (before != null) {
+            Allure.addAttachment("Số tiền tối đa được chuyển (trước)", String.format("%,d", before));
+        }
+        form.typeAmount(c.amount());
+        form.submit();
+        Outcome out = resultReader.readResult(null);
+        Allure.addAttachment("Kết quả", out.message());
+
+        assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống: %s", c.id(), out.message()).isFalse();
+        assertThat(out.success()).as("[%s] Giao dịch thành công. Hệ thống trả: '%s'", c.id(), out.message()).isTrue();
+        vn.bsc.automation.data.TransactionLog.succeeded(c, receiver); // statements checked by PostTransactionCheckTest
+
+        // money leaves the sending account: exactly the amount for an internal transfer, at least the amount otherwise
+        if (before != null) {
+            backToMenu();
+            toMenu();
+            Long after = openForm(c).maxTransferable();
+            long amount = Long.parseLong(c.amount());
+            Allure.addAttachment("Số tiền tối đa được chuyển (trước -> sau)",
+                    String.format("%,d -> %s", before, after == null ? "?" : String.format("%,d", after)));
+            assertThat(after).as("[%s] Đọc được số tiền tối đa được chuyển sau giao dịch", c.id()).isNotNull();
+            if ("CHUYEN_TIEN_NOI_BO".equals(c.option())) {
+                assertThat(before - after).as("[%s] Tiểu khoản gửi giảm đúng %,d", c.id(), amount).isEqualTo(amount);
+            } else {
+                assertThat(before - after).as("[%s] Tiền giảm ít nhất %,d (có thể kèm phí)", c.id(), amount)
+                        .isGreaterThanOrEqualTo(amount);
+            }
+        }
+    }
+
+    /** Picks the configured sub-account (its number or name) in the first of these fields present on the form. */
+    private static void selectConfigured(TransactionFormScreen form, String key, String... labels) {
+        String wanted = vn.bsc.automation.core.config.ConfigReader.get(key);
+        if (wanted == null || wanted.isBlank()) {
+            return;
+        }
+        for (String label : labels) {
+            if (form.firstFieldValue(label) != null) {
+                if (!form.fieldValue(label).contains(wanted.trim())) {
+                    form.selectFieldOption(label, wanted.trim());
+                }
+                return;
+            }
+        }
+        throw new AssertionError("Không thấy trường tiểu khoản (" + String.join(" / ", labels) + ") để chọn " + key);
+    }
+
+    /** Menu (already open) -> item -> option of its bottom sheet -> the transaction form. */
+    private TransactionFormScreen openForm(MenuTransactionCase c) {
         MenuItem item = MenuItem.valueOf(c.menuItem());
         MenuScreen menu = new MenuScreen().waitUntilLoaded();
         menu.open(item);
@@ -94,20 +160,7 @@ public class MenuTransactionTest extends LoggedInBaseTest {
             form = new TransactionFormScreen(item.title);
         }
         form.waitUntilLoaded();
-        Allure.addAttachment("Form", c.toString());
-        vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Form " + c.id());
-
-        if ("CHUYEN_TIEN_RA_NGOAI".equals(c.option())) {
-            // beneficiary account is a dropdown (not pre-filled): pick the first registered account
-            form.selectFirstOptionIfEmpty("Số tài khoản ngân hàng");
-        }
-        form.typeAmount(c.amount());
-        form.submit();
-        Outcome out = resultReader.readResult(null);
-        Allure.addAttachment("Kết quả", out.message());
-
-        assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống: %s", c.id(), out.message()).isFalse();
-        assertThat(out.success()).as("[%s] Giao dịch thành công. Hệ thống trả: '%s'", c.id(), out.message()).isTrue();
+        return form;
     }
 
     /** Back to the MENU only (not the main screen), ready for the next transaction. */

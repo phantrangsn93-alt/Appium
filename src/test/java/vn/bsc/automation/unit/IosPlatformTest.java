@@ -91,4 +91,13 @@ public class IosPlatformTest {
         Assert.assertEquals(nodes.get(3).className(), "android.widget.EditText");
         Assert.assertEquals(nodes.get(3).text().length(), 6);
     }
+
+    @Test
+    public void bottomNavLocatorDoesNotMatchLongerTexts() {
+        String p = predicate(Locators.classWithDescBadged("android.widget.ImageView", "Giao dịch"));
+        Pattern re = Pattern.compile(p.substring(p.indexOf("MATCHES \"") + 9, p.length() - 1));
+        Assert.assertTrue(re.matcher("Giao dịch").matches());
+        Assert.assertTrue(re.matcher("6\nGiao dịch").matches());
+        Assert.assertFalse(re.matcher("Giao dịch qua Tổng đài").matches());
+    }
 }

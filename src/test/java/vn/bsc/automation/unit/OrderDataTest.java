@@ -117,4 +117,31 @@ public class OrderDataTest {
             }
         }
     }
+
+    @org.testng.annotations.Test
+    public void configuredSymbolAndSubAccountOverrideCsv() {
+        String[] keys = {"order.symbol.buy.hose", "order.symbol.hose", "order.symbol.buy", "order.subaccount.buy"};
+        try {
+            java.util.List<vn.bsc.automation.data.OrderCase> base = vn.bsc.automation.data.OrderCase.load("testdata/orders.csv");
+            vn.bsc.automation.data.OrderCase lo = base.stream().filter(c -> c.id().equals("EX02_LO")).findFirst().orElseThrow();
+            org.testng.Assert.assertEquals(lo.symbol(), "AAA", "no config: CSV symbol");
+            System.setProperty("order.symbol.buy", "SSI");
+            System.setProperty("order.symbol.hose", "VNM");
+            org.testng.Assert.assertEquals(pick("EX02_LO").symbol(), "VNM", "exchange beats side");
+            System.setProperty("order.symbol.buy.hose", "FPT");
+            org.testng.Assert.assertEquals(pick("EX02_LO").symbol(), "FPT", "side+exchange beats exchange");
+            org.testng.Assert.assertEquals(pick("PS_LO").symbol(), "41I1GB000", "derivative not affected by stock keys");
+            System.setProperty("order.subaccount.buy", "MR90_BSC");
+            org.testng.Assert.assertEquals(pick("EX02_LO").subAccountName(), "MR90_BSC");
+        } finally {
+            for (String k : keys) {
+                System.clearProperty(k);
+            }
+        }
+    }
+
+    private static vn.bsc.automation.data.OrderCase pick(String id) {
+        return vn.bsc.automation.data.OrderCase.load("testdata/orders.csv").stream()
+                .filter(c -> c.id().equals(id)).findFirst().orElseThrow();
+    }
 }

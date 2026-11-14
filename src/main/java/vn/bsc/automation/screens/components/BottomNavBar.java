@@ -26,8 +26,9 @@ public class BottomNavBar extends BaseScreen {
     }
 
     private static By item(Item item) {
-        // an unread badge is prepended to the label: "6\nThông báo"
-        return Locators.classWithDescContaining("android.widget.ImageView", item.label());
+        // an unread badge may precede the label ("6\nThông báo"); exact label otherwise - "contains" also matched
+        // "Giao dịch qua Tổng đài" on sub-screens (iOS: any element type)
+        return Locators.classWithDescBadged("android.widget.ImageView", item.label());
     }
 
     @Override

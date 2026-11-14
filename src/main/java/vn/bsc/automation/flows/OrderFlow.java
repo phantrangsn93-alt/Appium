@@ -53,6 +53,9 @@ public class OrderFlow {
     /** "Mua ... thành công" for a buy order / "Bán ... thành công" for a sell order. */
     public static boolean isSideSuccessMessage(OrderCase.Side side, String msg) {
         String m = msg == null ? "" : vn.bsc.automation.core.utils.Locators.nfc(msg);
+        if (m.matches("(?is).*TP/SL thành công.*")) {
+            return side == OrderCase.Side.SELL; // "Đặt lệnh TP/SL thành công" (TP/SL = sell of a holding)
+        }
         return (side == OrderCase.Side.BUY ? SUCCESS_BUY : SUCCESS_SELL).matcher(m).matches();
     }
 
@@ -165,6 +168,85 @@ public class OrderFlow {
     public record FilledForm(OrderFormScreen form, BigDecimal price) {
     }
 
+    /**
+     * TP/SL (take profit / stop loss) on a held symbol: Giao dịch &gt; Danh mục &gt; tap the holding &gt; quantity,
+     * Chốt lời, Cắt lỗ &gt; Xác nhận (+ PIN/OTP). REAL ORDER. Prices are the sheet hints shifted by the test data
+     * ("HINT+0.1" for take profit, "HINT-0.1" for stop loss); quantity is capped by the quantity held.
+     */
+    private OrderCase lastTpSlTarget;
+
+    /** The TP/SL case on the holding actually picked in Danh mục (symbol / quantity), or null. */
+    public OrderCase lastTpSlTarget() {
+        return lastTpSlTarget;
+    }
+
+    @Step("Đặt lệnh TP/SL: {c}")
+    public Outcome placeTpSl(OrderCase c) {
+        lastTpSlTarget = null;
+        if (!vn.bsc.automation.core.config.AppConfig.orderSubmitEnabled()) {
+            throw new IllegalStateException("SAFETY GUARD: real orders are disabled (order.submit.enabled=false)");
+        }
+        navigator.openTrading().openOrderForm().selectSubAccount(c.subAccountName());
+        vn.bsc.automation.screens.PortfolioScreen portfolio = navigator.openTrading().openPortfolio();
+        List<String> held = portfolio.holdings();
+        if (held.isEmpty()) {
+            return new Outcome(false, "Danh mục trống: không có mã đang nắm giữ để đặt TP/SL", null);
+        }
+        String symbol = held.contains(c.symbol()) ? c.symbol() : held.get(0);
+        vn.bsc.automation.screens.components.TpSlSheet sheet = portfolio.openTpSl(symbol);
+        long qty = Math.min(c.quantity(), sheet.maxQuantity());
+        BigDecimal tp = shift(vn.bsc.automation.screens.components.TpSlSheet.hintValue(sheet.takeProfitHint()), c.price());
+        BigDecimal sl = shift(vn.bsc.automation.screens.components.TpSlSheet.hintValue(sheet.stopLossHint()), c.triggerPrice());
+        AllureUtils.attachText("TP/SL", symbol + " KL " + qty + " | Chốt lời " + tp + " | Cắt lỗ " + sl);
+        lastTpSlTarget = c.withTarget(symbol, qty);
+        sheet.setQuantity(qty).setTakeProfit(tp).setStopLoss(sl);
+        AllureUtils.attachScreenshot("TP/SL trước khi xác nhận");
+        sheet.verify(qty, tp, sl); // SAFETY: never confirm values different from the test data
+        sheet.confirm();
+        OrderConfirmDialog confirm = new OrderConfirmDialog();
+        if (confirm.isDisplayed(Duration.ofSeconds(10))) {
+            confirm.enterPinAndConfirm("TP/SL " + c.id());
+        }
+        return readResult(tp);
+    }
+
+    /**
+     * Pre-submit guard for REAL orders: the quantity on the form must equal the test data, and for limit-type orders
+     * the price on the form must equal the price that was entered. Throws (no order sent) on any mismatch - e.g.
+     * a keypad digit lost or doubled on a new platform.
+     */
+    void verifyFormBeforeSubmit(OrderCase c, FilledForm f) {
+        long qty = f.form().getQuantity();
+        if (qty != c.quantity()) {
+            AllureUtils.attachScreenshot("CHẶN GỬI LỆNH - KL sai");
+            throw new IllegalStateException("SAFETY: KL trên form = " + qty + " khác dữ liệu " + c.quantity()
+                    + " (" + c.id() + ") - KHÔNG gửi lệnh");
+        }
+        boolean limitPrice = !c.isMarketType() && !c.isConditional() && f.price() != null;
+        if (limitPrice) {
+            BigDecimal onForm = f.form().getPrice();
+            if (onForm == null || onForm.compareTo(f.price()) != 0) {
+                AllureUtils.attachScreenshot("CHẶN GỬI LỆNH - Giá sai");
+                throw new IllegalStateException("SAFETY: Giá trên form = " + onForm + " khác giá đã nhập " + f.price()
+                        + " (" + c.id() + ") - KHÔNG gửi lệnh");
+            }
+        }
+        AllureUtils.attachText("Kiểm tra trước khi gửi", "KL " + qty + (limitPrice ? ", giá " + f.price() : "") + " - khớp dữ liệu");
+    }
+
+    /** "HINT+0.1" / "HINT-0.2" / "" (= hint) / "7.5" (absolute) relative to {@code hint}. */
+    static BigDecimal shift(BigDecimal hint, String spec) {
+        if (spec == null || spec.isBlank() || "HINT".equalsIgnoreCase(spec.trim())) {
+            return hint;
+        }
+        java.util.regex.Matcher m = Pattern.compile("(?i)HINT\\s*([+-])\\s*([0-9.]+)").matcher(spec.trim());
+        if (m.matches()) {
+            BigDecimal d = new BigDecimal(m.group(2));
+            return "+".equals(m.group(1)) ? hint.add(d) : hint.subtract(d);
+        }
+        return new BigDecimal(spec.trim());
+    }
+
     /** Excel steps 2-10: fill + Mua/Bán -> PIN (typed by the tester) -> Xác nhận. REAL ORDER. */
     @Step("Đặt lệnh: {c}")
     public Outcome place(OrderCase c) {
@@ -176,6 +258,7 @@ public class OrderFlow {
         } catch (AssertionError e) {
             AllureUtils.attachText("Không đọc được số dư trước khi đặt", e.getMessage());
         }
+        verifyFormBeforeSubmit(c, f); // SAFETY: never send an order whose form differs from the test data
         OrderConfirmDialog confirm = f.form().submitRealOrder(c.isConditional());
         String preError = f.form().lastPreConfirmError();
         if (confirm == null) {

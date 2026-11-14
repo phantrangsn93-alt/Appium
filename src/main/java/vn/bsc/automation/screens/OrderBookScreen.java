@@ -75,6 +75,10 @@ public class OrderBookScreen extends BaseScreen {
     // ------------------------------------------------------------------ statuses (config, see config.properties)
 
     public static final Pattern STATUS_PLACED = status("order.status.placed", "Đã gửi|Chờ gửi");
+    /** Normal order placed IN the matching session (business rule 14/11/2026). */
+    public static final Pattern STATUS_SENT = status("order.status.sent", "Đã gửi");
+    /** Normal order accepted OUTSIDE the session, queued for the next one. */
+    public static final Pattern STATUS_QUEUED = status("order.status.queued", "Chờ gửi");
     /** Conditional orders (Stop Limit / Trailing Stop / OCO) right after placing: waiting for their trigger. */
     public static final Pattern STATUS_CONDITIONAL_PLACED = status("order.status.conditional.placed", "Chờ kích hoạt");
 
@@ -112,6 +116,7 @@ public class OrderBookScreen extends BaseScreen {
                 case "STOP_LIMIT" -> "Stop Limit";
                 case "TRAILING_STOP" -> "Trailing Stop";
                 case "OCO" -> "OCO";
+                case "TPSL" -> "TP/SL"; // to confirm on device
                 case "LO" -> "Limit"; // LO-GTC row in the "Điều kiện" tab: "AAA | MUA | Limit | 100 | ● Chờ kích hoạt"
                 default -> type;
             };

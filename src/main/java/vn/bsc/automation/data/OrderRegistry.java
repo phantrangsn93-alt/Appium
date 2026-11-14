@@ -58,6 +58,11 @@ public final class OrderRegistry {
         }
     }
 
+    /** Every order placed by tests in this JVM (open or closed). */
+    public static List<PlacedOrder> all() {
+        return List.copyOf(ORDERS.values());
+    }
+
     public static List<PlacedOrder> pending() {
         List<PlacedOrder> out = new ArrayList<>();
         ORDERS.forEach((id, o) -> {

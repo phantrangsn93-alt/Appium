@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Runs the same TestNG suite on Android and iOS at the same time (one Maven process per platform).
 # Usage: ./run-both.sh [suite.xml] [ios-wda-url]
-#   ./run-both.sh testng-readonly.xml http://192.168.1.95:8100
+#   ./run-both.sh testng-market.xml http://192.168.1.95:8100
 # Results: target/android/... and target/ios/... (allure-results, surefire-reports, evidence), logs in target/*.log
 set -euo pipefail
 cd "$(dirname "$0")"
-SUITE="${1:-testng-readonly.xml}"
+SUITE="${1:-testng-market.xml}"
 WDA_URL="${2:-}"
 export JAVA_HOME="${JAVA_HOME:-$HOME/.local/java/jdk-17.0.20+8/Contents/Home}"
 export PATH="$HOME/.local/apache-maven-3.9.9/bin:$PATH"

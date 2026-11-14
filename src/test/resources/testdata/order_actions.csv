@@ -1,9 +1,15 @@
-﻿# Thao tác trên lệnh đã đặt (theo id trong orders.csv). Chạy SAU khi đặt lệnh, theo thứ tự dòng.
+# Thao tác trên lệnh đã đặt (theo id trong orders.csv). Chạy SAU lệnh thường, TRƯỚC lệnh điều kiện; theo thứ tự dòng.
 # Theo file "Kịch bản kiểm thử sau khi update App.xlsx" - excelNo = số dòng trong Excel.
 # action: MODIFY | CANCEL | CANCEL_ALL
 #   MODIFY: priceSteps = số lần bấm + ở giá (âm = bấm -, trống = giữ giá); newQuantity = KL mới (trống = giữ KL)
 # CANCEL_ALL chỉ huỷ khi MỌI lệnh chờ đều do test tạo; nếu có lệnh khác => dừng an toàn (FAIL), không huỷ.
+# PS_MODIFY / PS_CANCEL: bật khi PS_LO (orders.csv) được bật với mã hợp đồng phái sinh hiện hành và tiểu khoản phái sinh có tiền.
 id,enabled,excelNo,description,action,targetId,priceSteps,newQuantity
-EX06_MODIFY,true,12,Sửa lệnh: Sửa Khối lượng = 200,MODIFY,EX02_LO,,200
-EX07_CANCEL,true,13,Hủy 1 lệnh (lệnh trạng thái Đã gửi),CANCEL,EX02_LO,,
+EX06_MODIFY,true,12,Sửa lệnh lô chẵn: sửa Khối lượng = 200,MODIFY,EX02_LO,,200
+MOD_PRICE,true,,Sửa lệnh lô chẵn: sửa Giá (+1 bước giá),MODIFY,EX02_LO,1,
+MOD_ODD,true,,Sửa lệnh lô lẻ: sửa Khối lượng = 2,MODIFY,ODD_HOSE,,2
+CANCEL_ODD,true,,Huỷ lệnh lô lẻ,CANCEL,ODD_HOSE,,
+EX07_CANCEL,true,13,Huỷ lệnh lô chẵn (trạng thái Đã gửi / Chờ gửi),CANCEL,EX02_LO,,
+PS_MODIFY,false,,Sửa lệnh phái sinh: sửa Giá (+1 bước giá),MODIFY,PS_LO,1,
+PS_CANCEL,false,,Huỷ lệnh phái sinh,CANCEL,PS_LO,,
 EX08_CANCEL_ALL,true,14,Hủy nhiều lệnh (Hủy tất cả),CANCEL_ALL,,,

@@ -19,6 +19,7 @@ import java.time.Duration;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
@@ -114,7 +115,18 @@ public class OrderFormScreen extends BaseScreen {
                 .max(Comparator.comparingInt(UiNode::x)).orElse(null);
         UiNode plus = sameRow.stream().filter(n -> n.x() >= value.x() + value.width() - 5)
                 .min(Comparator.comparingInt(UiNode::x)).orElse(null);
-        return minus == null || plus == null ? null : List.of(minus, value, plus);
+        if (minus != null && plus != null) {
+            return List.of(minus, value, plus);
+        }
+        // iOS: the "-" / "+" icons are not accessibility elements. A stepper value is the WIDE numeric field
+        // (≈ half the screen; the price chips 7.29 / 6.82 / 6.35 are narrow): synthesize the icons right beside it.
+        if (vn.bsc.automation.core.config.Platform.ios() && value.width() > 120) {
+            int w = Math.max(24, value.height());
+            UiNode m = new UiNode(value.className(), "", "", true, value.x() - w - 2, value.y(), w, value.height());
+            UiNode p = new UiNode(value.className(), "", "", true, value.x() + value.width() + 2, value.y(), w, value.height());
+            return List.of(m, value, p);
+        }
+        return null;
     }
 
     /** Evaluates a form check, treating a transient overlay (AssertionError: row not found) as "not yet". */
@@ -316,12 +328,20 @@ public class OrderFormScreen extends BaseScreen {
 
     /** Value following a label inside the info container, e.g. "Sức mua:" -> "3,108,400". */
     private String infoValue(String label) {
-        List<String> lines = Arrays.asList(getDesc(infoContainer).split("\n"));
-        int i = lines.indexOf(label);
-        if (i < 0 || i + 1 >= lines.size()) {
-            throw new AssertionError("Label '" + label + "' not found in order info: " + lines);
+        // one snapshot, label OR value of each node: on iOS the info container's text can sit in "value"
+        for (int attempt = 0; attempt < 10; attempt++) {
+            for (UiNode n : UiNode.snapshot(driver().getPageSource())) {
+                List<String> lines = Arrays.asList((n.desc() + "\n" + (n.text() == null ? "" : n.text())).split("\n"));
+                List<String> trimmed = lines.stream().map(String::trim).toList();
+                int i = trimmed.indexOf(label);
+                // next line is the value unless it is the next label ("KL Tối đa:" may be empty)
+                if (i >= 0 && i + 1 < trimmed.size() && !trimmed.get(i + 1).isEmpty() && !trimmed.get(i + 1).endsWith(":")) {
+                    return trimmed.get(i + 1);
+                }
+            }
+            WaitUtils.condition(() -> false, Duration.ofMillis(500));
         }
-        return lines.get(i + 1).trim();
+        throw new AssertionError("Label '" + label + "' not found in order info");
     }
 
     public long getBuyingPower() {
@@ -517,6 +537,36 @@ public class OrderFormScreen extends BaseScreen {
 
     @Step("Chọn hiệu lực index {index}")
     public OrderFormScreen selectValidity(int index) {
+        if (vn.bsc.automation.core.config.Platform.ios()) {
+            // iOS: no radio element type to rely on (the "Button" role matched another control and reopened the
+            // keypad). Tap the radio circle drawn right of its label "Trong ngày" / "Nhiều ngày".
+            // Survey 14/11/2026: the labels are NOT exposed; only the two radio circles are (small Buttons on the row
+            // below the 25%/50%/75%/100% chips, selected one has value "1").
+            List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+            Optional<UiNode> pct = nodes.stream().filter(n -> "100%".equals(n.desc())).max(Comparator.comparingInt(UiNode::y));
+            if (pct.isEmpty()) {
+                if (index == 0) {
+                    return this; // default validity is "Trong ngày"
+                }
+                throw new AssertionError("Không thấy hàng hiệu lực (Nhiều ngày)");
+            }
+            int y0 = pct.get().y();
+            List<UiNode> radios = nodes.stream()
+                    .filter(n -> n.clickable() && n.width() < 60 && n.y() > y0 + 15 && n.y() < y0 + 90)
+                    .sorted(Comparator.comparingInt(UiNode::x)).toList();
+            if (radios.size() < 2) {
+                if (index == 0) {
+                    return this;
+                }
+                throw new AssertionError("Không thấy nút chọn hiệu lực: " + radios);
+            }
+            UiNode r = radios.get(index);
+            if (!"1".equals(r.text() == null ? "" : r.text().trim())) {
+                GestureUtils.tap(r.x() + r.width() / 2, r.y() + r.height() / 2);
+                WaitUtils.condition(() -> false, Duration.ofMillis(600));
+            }
+            return this;
+        }
         org.openqa.selenium.WebElement radio = validityRadio(index);
         if (!Boolean.parseBoolean(radio.getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr()))) {
             vn.bsc.automation.core.driver.DeviceActions.tap(radio);
@@ -630,7 +680,8 @@ public class OrderFormScreen extends BaseScreen {
 
     // ------------------------------------------------------------------ sub-account / market price type
 
-    private static final Pattern SUB_ACCOUNT = Pattern.compile("^.+ - [0-9A-Z]{10}$");
+    // sub-account numbers are 10 DIGITS; the custody code "002C191910" (separate node on iOS) must not match
+    private static final Pattern SUB_ACCOUNT = Pattern.compile("^.+ - [0-9]{10}$");
 
     /** Current sub-account label in the header, e.g. "Thường_BSC - 0001000005". */
     public String getSubAccount() {
@@ -648,7 +699,20 @@ public class OrderFormScreen extends BaseScreen {
             return this;
         }
         tap(Locators.a11y(current));
-        tap(Locators.descStartsWith(name + " - "));
+        // pick the option in the opened sheet from a snapshot: labels may carry zero-width characters (iOS) and the
+        // form's own sub-account field (behind the sheet) starts with the same text -> take the LOWEST match
+        String want = Locators.nfc(name) + " - ";
+        UiNode[] option = new UiNode[1];
+        WaitUtils.condition(() -> {
+            option[0] = UiNode.snapshot(driver().getPageSource()).stream()
+                    .filter(n -> n.desc().startsWith(want))
+                    .max(Comparator.comparingInt(UiNode::y)).orElse(null);
+            return option[0] != null && option[0].y() > 300;
+        }, Duration.ofSeconds(8));
+        if (option[0] == null) {
+            throw new AssertionError("Không thấy tiểu khoản " + name + " trong danh sách");
+        }
+        tapNode(option[0]);
         failOnAppError("chọn tiểu khoản " + name);
         if (!WaitUtils.condition(() -> getSubAccount().startsWith(Locators.nfc(name) + " - "), Duration.ofSeconds(10))) {
             throw new AssertionError("Không chọn được tiểu khoản " + name);
@@ -783,8 +847,22 @@ public class OrderFormScreen extends BaseScreen {
         }
         // Seen on UAT: the "Xác nhận đặt lệnh" sheet opens and an error dialog (e.g. E_SYSTEM_ERROR) pops up ON TOP
         // of it. The modal hides the sheet's semantics, so close the error first, then look for the sheet again.
+        String shown = null;
         if (error.isShown(Duration.ofMillis(500))) {
-            String msg = error.getMessage();
+            try {
+                shown = error.getMessage();
+            } catch (RuntimeException e) { // the dialog re-rendered while reading it
+                shown = "";
+            }
+        }
+        if (shown != null && java.text.Normalizer.normalize(shown, java.text.Normalizer.Form.NFC).contains("Chọn kênh nhận mã")) {
+            // Not an error: the OTP channel picker (first order of the session). Leave it open - the confirm
+            // dialog waits for the tester to pick a channel and type the OTP.
+            log.info("Màn xác nhận yêu cầu OTP (Chọn kênh nhận mã) - chờ người dùng nhập OTP");
+            lastPreConfirmError = null;
+            return confirm; // the sheet is open behind the picker (its title is hidden while the picker shows)
+        } else if (shown != null && !shown.isBlank()) {
+            String msg = shown;
             vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Lỗi khi mở xác nhận lệnh: " + msg);
             vn.bsc.automation.core.utils.AllureUtils.attachText("Lỗi hiển thị trên màn xác nhận lệnh", msg);
             log.warn("Error dialog over the order confirmation: {}", msg);

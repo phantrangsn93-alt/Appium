@@ -71,6 +71,18 @@ public class ExcelOrderTest extends LoggedInBaseTest {
                 vn.bsc.automation.core.config.ConfigReader.get("orders.include", ".*"));
         return OrderCase.load("testdata/orders.csv").stream()
                 .filter(OrderCase::enabled).filter(c -> include.matcher(c.id()).matches())
+                .filter(c -> !c.isConditional() && !c.isTpSl())
+                .map(c -> new Object[]{c}).toArray(Object[][]::new);
+    }
+
+    /** Conditional orders (Stop Limit / Trailing Stop / OCO) and TP/SL - run AFTER the normal orders' modify/cancel. */
+    @DataProvider(name = "conditionalOrders")
+    public Object[][] conditionalOrders() {
+        java.util.regex.Pattern include = java.util.regex.Pattern.compile(
+                vn.bsc.automation.core.config.ConfigReader.get("orders.include", ".*"));
+        return OrderCase.load("testdata/orders.csv").stream()
+                .filter(OrderCase::enabled).filter(c -> include.matcher(c.id()).matches())
+                .filter(c -> c.isConditional() || c.isTpSl())
                 .map(c -> new Object[]{c}).toArray(Object[][]::new);
     }
 
@@ -81,6 +93,8 @@ public class ExcelOrderTest extends LoggedInBaseTest {
                 vn.bsc.automation.core.config.ConfigReader.get("actions.include", ".*"));
         return OrderActionCase.load("testdata/order_actions.csv").stream()
                 .filter(OrderActionCase::enabled).filter(a -> include.matcher(a.id()).matches())
+                // all MODIFY cases first (they need live orders), then CANCEL, CANCEL_ALL last; stable within a group
+                .sorted(java.util.Comparator.comparingInt(a -> a.action().ordinal()))
                 .map(a -> new Object[]{a}).toArray(Object[][]::new);
     }
 
@@ -88,8 +102,21 @@ public class ExcelOrderTest extends LoggedInBaseTest {
 
     @Test(dataProvider = "orders", priority = 1, groups = {"excel", "order", "real-order", "manual-input"})
     @Severity(SeverityLevel.BLOCKER)
-    @Description("Đặt lệnh theo testdata/orders.csv: Giao dịch -> tiểu khoản -> mã CK -> giá -> KL -> Mua/Bán -> PIN -> Xác nhận")
+    @Description("Đặt lệnh thường theo testdata/orders.csv: Giao dịch -> tiểu khoản -> mã CK -> giá -> KL -> Mua/Bán -> PIN -> Xác nhận")
     public void placeOrder(OrderCase c) {
+        runOrder(c);
+    }
+
+    /** Priority 3: after placing (1) and modifying / cancelling (2) the normal orders. */
+    @Test(dataProvider = "conditionalOrders", priority = 3, groups = {"excel", "order", "real-order", "manual-input"})
+    @Severity(SeverityLevel.BLOCKER)
+    @Description("Đặt lệnh điều kiện (Stop Limit / Trailing Stop / OCO) và TP/SL: thông báo thành công, Sổ lệnh tab Điều kiện "
+            + "có lệnh trạng thái \"Chờ kích hoạt\"")
+    public void placeConditionalOrder(OrderCase c) {
+        runOrder(c);
+    }
+
+    private void runOrder(OrderCase c) {
         boolean inSession = TradingSession.isOpenNow(c.exchange(), c.sessions());
         Allure.parameter("Phiên hiện tại hợp lệ", inSession);
         Allure.parameter("Thời điểm", ZonedDateTime.now(TradingSession.VN).toString());
@@ -98,7 +125,11 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         OrderBookScreen.OrderSpec probe = probeSpec(c);
         int rowsBefore = navigator.openTrading().openOrderBook().count(probe, OrderBookScreen.placedStatus(probe));
 
-        Outcome out = orderFlow.place(c);
+        Outcome out = c.isTpSl() ? orderFlow.placeTpSl(c) : orderFlow.place(c);
+        if (c.isTpSl() && orderFlow.lastTpSlTarget() != null) {
+            c = orderFlow.lastTpSlTarget(); // verify / cancel the holding actually picked (may differ from the CSV symbol)
+            Allure.parameter("Mã TP/SL thực tế", c.symbol() + " x" + c.quantity());
+        }
         boolean messageCaptured = !out.message().isBlank();
         if (!out.success() && !messageCaptured) {
             // No dialog / toast caught: the order book is the source of truth
@@ -124,11 +155,11 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         if (inSession) {
             assertThat(out.success()).as("[%s] Trong phiên: phải đặt lệnh thành công. Hệ thống trả: %s", c.id(), out.message())
                     .isTrue();
-            verifyPlacedOrder(c, out, placed);
+            verifyPlacedOrder(c, out, placed, true);
             return;
         }
         if (placed != null && c.outOfSession() != OrderCase.OutOfSession.REJECT) {
-            verifyPlacedOrder(c, out, placed); // accepted outside the session (e.g. queued "Chờ gửi")
+            verifyPlacedOrder(c, out, placed, false); // accepted outside the session: queued "Chờ gửi"
         }
         // Out of session (e.g. ATO/ATC/MTL placed in the wrong session)
         switch (c.outOfSession()) {
@@ -217,7 +248,7 @@ public class ExcelOrderTest extends LoggedInBaseTest {
      *     (normal order) or "Chờ kích hoạt" (conditional order, listed under the "Điều kiện" filter),
      * (3) NORMAL orders only: reduce Sức mua (buy) / the available stock balance = KL tối đa (sell).
      */
-    private void verifyPlacedOrder(OrderCase c, Outcome out, PlacedOrder placed) {
+    private void verifyPlacedOrder(OrderCase c, Outcome out, PlacedOrder placed, boolean inSession) {
         SoftAssertions soft = new SoftAssertions();
         String side = c.side() == OrderCase.Side.BUY ? "mua" : "bán";
 
@@ -231,13 +262,24 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         }
 
         OrderBookScreen.OrderSpec spec = OrderBookScreen.OrderSpec.of(placed);
-        String expected = c.inConditionalBook() ? "Chờ kích hoạt" : "Đã gửi/Chờ gửi";
-        Optional<UiNode> row = navigator.openTrading().openOrderBook()
-                .waitFor(spec, OrderBookScreen.placedStatus(spec), BOOK_TIMEOUT);
+        // conditional / TP/SL / LO-GTC: "Chờ kích hoạt"; normal: "Đã gửi" in session, "Chờ gửi" out of session
+        java.util.regex.Pattern status = c.inConditionalBook() ? OrderBookScreen.STATUS_CONDITIONAL_PLACED
+                : inSession ? OrderBookScreen.STATUS_SENT : OrderBookScreen.STATUS_QUEUED;
+        String expected = c.inConditionalBook() ? "Chờ kích hoạt" : inSession ? "Đã gửi" : "Chờ gửi";
+        Optional<UiNode> row = navigator.openTrading().openOrderBook().waitFor(spec, status, BOOK_TIMEOUT);
         row.ifPresent(r -> Allure.addAttachment("Dòng lệnh trong Sổ lệnh", OrderBookScreen.text(r)));
         soft.assertThat(row).as("[%s] (2) Sổ lệnh có lệnh %s với trạng thái %s", c.id(), spec, expected).isPresent();
 
-        // (3) only NORMAL orders block balance; conditional orders are not checked (business rule)
+        // (3) business rule: normal BUY -> Sức mua decreases; normal SELL -> KL khả dụng decreases by the quantity;
+        //     conditional orders (incl. LO-GTC) -> balance UNCHANGED (nothing is held until activation)
+        if (c.inConditionalBook() && out.balanceBefore() != null) {
+            long before = out.balanceBefore();
+            long after = orderFlow.readBalanceAfter(c, before, java.time.Duration.ofSeconds(6)); // no change expected
+            String what = c.side() == OrderCase.Side.BUY ? "Sức mua" : "KL khả dụng";
+            Allure.addAttachment(what + " trước / sau (lệnh điều kiện)", before + " -> " + after);
+            soft.assertThat(after).as("[%s] (3) Lệnh điều kiện: %s không đổi (trước %,d)", c.id(), what, before)
+                    .isEqualTo(before);
+        }
         boolean checkBalance = !c.inConditionalBook();
         if (checkBalance && out.balanceBefore() != null) {
             long before = out.balanceBefore();

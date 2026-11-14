@@ -85,6 +85,19 @@ public final class Locators {
         return uiSelector("className(\"" + className + "\").descriptionMatches(\"(?s).*" + anyForm(label) + ".*\")");
     }
 
+    /**
+     * Element of a class whose label is exactly {@code label}, optionally preceded by a badge line
+     * ("6\nThông báo"). Unlike {@link #classWithDescContaining} it never matches longer texts such as
+     * "Giao dịch qua Tổng đài".
+     */
+    public static By classWithDescBadged(String className, String label) {
+        String regex = "(?s)(?:[0-9]+.)?" + anyForm(label);
+        if (Platform.ios()) {
+            return typedLabel(className, regex);
+        }
+        return uiSelector("className(\"" + className + "\").descriptionMatches(\"" + regex + "\")");
+    }
+
     /** Element of a class whose content-desc equals any of the labels (normalization-insensitive). */
     public static By classWithDescAny(String className, String... labels) {
         StringBuilder sb = new StringBuilder("(?:");

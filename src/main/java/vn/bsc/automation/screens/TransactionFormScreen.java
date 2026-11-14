@@ -144,4 +144,24 @@ public class TransactionFormScreen extends MenuTargetScreen {
     public void tapConfirm() {
         tap(CONFIRM);
     }
+
+    /** "Số tiền tối đa được chuyển" of the sending (sub-)account; null when the form does not show it. */
+    public Long maxTransferable() {
+        try {
+            String v = valueBelow("Số tiền tối đa được chuyển").replaceAll("[^0-9]", "");
+            return v.isEmpty() ? null : Long.parseLong(v);
+        } catch (AssertionError e) {
+            return null;
+        }
+    }
+
+    /** Value of the first of these "label\nvalue" fields present on the form (null when none). */
+    public String firstFieldValue(String... labels) {
+        for (String l : labels) {
+            if (isVisible(Locators.field(l), java.time.Duration.ofSeconds(1))) {
+                return fieldValue(l);
+            }
+        }
+        return null;
+    }
 }

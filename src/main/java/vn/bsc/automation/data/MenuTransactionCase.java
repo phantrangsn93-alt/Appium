@@ -22,8 +22,17 @@ public record MenuTransactionCase(String id, boolean enabled, String menuItem, S
     }
 
     static MenuTransactionCase from(Map<String, String> r) {
+        String amount = r.getOrDefault("amount", "");
+        if (!amount.isBlank()) {
+            // menu.tx.amount (money, VND) / menu.tx.stock.qty (securities transfer) override the CSV when set
+            String key = "CHUYEN_CHUNG_KHOAN".equals(r.get("menuItem")) ? "menu.tx.stock.qty" : "menu.tx.amount";
+            String o = vn.bsc.automation.core.config.ConfigReader.get(key);
+            if (o != null && !o.isBlank()) {
+                amount = o.trim();
+            }
+        }
         return new MenuTransactionCase(r.get("id"), !"false".equalsIgnoreCase(r.getOrDefault("enabled", "true")),
-                r.get("menuItem"), r.getOrDefault("option", ""), r.getOrDefault("amount", ""), r.getOrDefault("note", ""));
+                r.get("menuItem"), r.getOrDefault("option", ""), amount, r.getOrDefault("note", ""));
     }
 
     @Override

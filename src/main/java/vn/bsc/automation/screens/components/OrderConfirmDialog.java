@@ -58,6 +58,12 @@ public class OrderConfirmDialog extends BaseScreen {
             } else {
                 log.warn("Không thấy ô nhập PIN trên màn xác nhận ({})", context);
             }
+        } else if (otpRequired()) {
+            // Production: SMS/Zalo/Viber OTP (first order of the session). The tester picks the channel, taps
+            // "Lấy OTP" and types the code; the test then taps "Xác nhận" (or the tester already did).
+            ManualInput.waitForUser("Chọn kênh OTP, bấm Lấy OTP và nhập mã OTP trên điện thoại cho: " + context,
+                    () -> otpTyped() || (sheetReallyClosed() && !otpOnScreen()));
+            closeKeyboardWithoutBack();
         } else if (!isVisible(pinField, Duration.ofSeconds(2))) {
             log.info("Không có ô PIN/OTP (Đã xác thực) - bấm Xác nhận luôn: {}", context);
         } else {
@@ -67,6 +73,35 @@ public class OrderConfirmDialog extends BaseScreen {
         }
         tapConfirmWhenEnabled(context);
         WaitUtils.waitInvisible(title, Duration.ofSeconds(15));
+    }
+
+    /** OTP step on the sheet: the channel picker is open, or a "Lấy OTP" button is shown. */
+    private boolean otpRequired() {
+        // the OTP step can render a moment after the sheet; labels mix NFC/NFD forms -> normalize the raw source
+        // (the picker / "Lấy OTP" nodes are not always kept by UiNode's filters on iOS)
+        return WaitUtils.condition(() -> {
+            String src = nfc(driver().getPageSource());
+            return src.contains("Chọn kênh nhận mã") || src.contains("Lấy OTP") || src.contains("Lấy mã OTP");
+        }, Duration.ofSeconds(4));
+    }
+
+    private boolean otpOnScreen() {
+        String src = nfc(driver().getPageSource());
+        return src.contains("Chọn kênh nhận mã") || src.contains("Lấy OTP") || src.contains("Lấy mã OTP");
+    }
+
+    private static String nfc(String s) {
+        return s == null ? "" : java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC).trim();
+    }
+
+    /** A 6-digit code is in the OTP field and the channel picker is closed. */
+    private boolean otpTyped() {
+        String src = nfc(driver().getPageSource());
+        if (src.contains("Chọn kênh nhận mã")) {
+            return false;
+        }
+        // OTP field: value="123456" (iOS) / text="123456" (Android)
+        return java.util.regex.Pattern.compile("(?:value|text)=\"[0-9]{6}\"").matcher(src).find();
     }
 
     /**

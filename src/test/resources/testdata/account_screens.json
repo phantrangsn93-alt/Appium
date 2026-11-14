@@ -1,0 +1,144 @@
+{
+  "_comment": "Bộ CHỈ ĐỌC - Quản lý tài khoản / Tiện ích / Cài đặt: mở màn và kiểm tra đủ trường/cột (nhãn khớp từ đầu dòng). rows=true: phải có ít nhất 1 dòng dữ liệu (trống => FAIL). privacy=true: không chụp ảnh màn hình (dữ liệu cá nhân), chỉ kiểm tra có giá trị. Nguồn nhãn: docs/locators-menu.md + khảo sát production 10/11/2026. Thứ tự = thứ tự trên Menu; chạy nối tiếp từ Menu đang mở (không ra màn chính).",
+  "screens": [
+    {
+      "id": "TC_UTIL_01",
+      "menuItem": "TRA_CUU_DANH_MUC_KY_QUY",
+      "title": "Tra cứu danh mục ký quỹ",
+      "expect": [
+        "Rổ CK",
+        "Mã CK",
+        "Tỷ lệ vay",
+        "Room còn lại"
+      ],
+      "rows": true
+    },
+    {
+      "id": "TC_ACC_07",
+      "menuItem": "DU_NO_KY_QUY",
+      "title": "Dư nợ ký quỹ (màn \"Nợ ký quỹ\")",
+      "expect": []
+    },
+    {
+      "id": "TC_ACC_01",
+      "menuItem": "SAO_KE_TIEN",
+      "title": "Sao kê tiền (+ Đầu kỳ + tăng − giảm = Cuối kỳ)",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Đầu kỳ",
+        "Phát sinh tăng",
+        "Phát sinh giảm",
+        "Cuối kỳ"
+      ],
+      "balanceCheck": true
+    },
+    {
+      "id": "TC_ACC_02",
+      "menuItem": "SAO_KE_CHUNG_KHOAN",
+      "title": "Sao kê chứng khoán",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Mã CK"
+      ]
+    },
+    {
+      "id": "TC_ACC_03",
+      "menuItem": "LICH_SU_DAT_LENH",
+      "title": "Lịch sử đặt lệnh",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Trạng thái",
+        "Mã CK",
+        "M/B",
+        "Giá đặt",
+        "KL đặt"
+      ]
+    },
+    {
+      "id": "TC_ACC_04",
+      "menuItem": "LICH_SU_LENH_DIEU_KIEN",
+      "title": "Lịch sử lệnh điều kiện",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Mã CK",
+        "Loại lệnh",
+        "Trạng thái"
+      ]
+    },
+    {
+      "id": "TC_ACC_05",
+      "menuItem": "LICH_SU_KHOP_LENH",
+      "title": "Lịch sử khớp lệnh",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Loại giao dịch",
+        "Mã CK",
+        "Giá khớp",
+        "KL khớp"
+      ]
+    },
+    {
+      "id": "TC_ACC_06",
+      "menuItem": "LAI_LO_THUC_HIEN",
+      "title": "Lãi/lỗ thực hiện",
+      "expect": [
+        "Tiểu khoản",
+        "Từ ngày",
+        "Đến ngày",
+        "Mã CK",
+        "Tổng giá trị vốn",
+        "Tổng giá trị thực hiện",
+        "Lãi/Lỗ"
+      ]
+    },
+    {
+      "id": "TC_SET_01",
+      "menuItem": "THONG_TIN_CA_NHAN",
+      "title": "Thông tin cá nhân",
+      "expect": [
+        "Ngày sinh",
+        "Giới tính",
+        "Số CMND/CCCD",
+        "Ngày cấp",
+        "Nơi cấp",
+        "Điện thoại di động",
+        "Email"
+      ],
+      "privacy": true,
+      "valuesRequired": true
+    },
+    {
+      "id": "TC_SET_02",
+      "menuItem": "DANG_KY_DICH_VU",
+      "title": "Đăng ký dịch vụ",
+      "expect": [
+        "Kết nối BIDV @Securities",
+        "Thiết lập SMS",
+        "Thiết lập Email"
+      ]
+    },
+    {
+      "id": "TC_SET_04",
+      "menuItem": "GIAO_DIEN",
+      "title": "Giao diện (màn \"Thiết lập giao diện\")",
+      "expect": []
+    },
+    {
+      "id": "TC_SET_03",
+      "menuItem": "NGAN_HANG_THU_HUONG",
+      "title": "Danh sách ngân hàng thụ hưởng",
+      "expect": [],
+      "privacy": true
+    }
+  ]
+}

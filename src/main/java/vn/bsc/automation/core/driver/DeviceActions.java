@@ -139,7 +139,7 @@ public final class DeviceActions {
         }
         List<WebElement> back = driver().findElements(Locators.classWithDescAny("android.widget.Button", BACK_LABELS));
         if (!back.isEmpty()) {
-            back.get(0).click();
+            tap(back.get(0)); // coordinate tap: element click is ignored on iOS (see tap())
             return;
         }
         // The app's AppBar "<" (top-left) has no accessibility node on iOS: tap its position; if the screen did not

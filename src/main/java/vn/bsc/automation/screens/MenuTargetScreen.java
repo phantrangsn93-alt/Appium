@@ -83,4 +83,72 @@ public class MenuTargetScreen extends BaseScreen {
     public void openTab(String name) {
         tapTab(Locators.tab(name));
     }
+
+    /**
+     * Every text line of the screen (labels and values, NFC, without zero-width chars), collected while scrolling
+     * down up to {@code maxScrolls} times. Multi-line nodes are split into lines.
+     */
+    public java.util.List<String> collectTexts(int maxScrolls) {
+        java.util.LinkedHashSet<String> out = new java.util.LinkedHashSet<>();
+        String previous = null;
+        for (int i = 0; i <= maxScrolls; i++) {
+            java.util.List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+            StringBuilder sig = new StringBuilder();
+            for (UiNode n : nodes) {
+                for (String line : (n.desc() + "\n" + n.text()).split("\n")) {
+                    String t = line.trim();
+                    if (!t.isEmpty()) {
+                        out.add(t);
+                        sig.append(t);
+                    }
+                }
+            }
+            if (sig.toString().equals(previous)) {
+                break; // end of the screen
+            }
+            previous = sig.toString();
+            if (i < maxScrolls) {
+                vn.bsc.automation.core.utils.GestureUtils.scrollBy(0.5);
+            }
+        }
+        return new java.util.ArrayList<>(out);
+    }
+
+    /** Data rows: clickable multi-line nodes (statement lines, order history rows...). */
+    public java.util.List<String> rows() {
+        return UiNode.snapshot(driver().getPageSource()).stream()
+                .filter(n -> n.clickable() && n.desc().contains("\n") && !n.desc().contains("Tab "))
+                .map(UiNode::desc).toList();
+    }
+
+    /** Opens a dropdown field and picks the option containing {@code text} (e.g. a sub-account number). */
+    public void selectFieldOption(String label, String text) {
+        tapField(label);
+        String want = Locators.nfc(text);
+        UiNode[] hit = new UiNode[1];
+        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+            hit[0] = UiNode.snapshot(driver().getPageSource()).stream()
+                    .filter(n -> n.clickable() && n.desc().replace("\n", " ").contains(want)
+                            && !n.desc().startsWith(Locators.nfc(label)))
+                    .findFirst().orElse(null);
+            return hit[0] != null;
+        }, java.time.Duration.ofSeconds(10));
+        if (hit[0] == null) {
+            throw new AssertionError("Không có lựa chọn \"" + text + "\" cho " + label);
+        }
+        vn.bsc.automation.core.utils.GestureUtils.tap(hit[0].x() + hit[0].width() / 2, hit[0].y() + hit[0].height() / 2);
+    }
+
+    /** Text lines of the current screen in order, duplicates KEPT (equal values such as Đầu kỳ = Cuối kỳ). */
+    public java.util.List<String> lines() {
+        java.util.List<String> out = new java.util.ArrayList<>();
+        for (UiNode n : UiNode.snapshot(driver().getPageSource())) {
+            for (String line : n.desc().split("\n")) {
+                if (!line.trim().isEmpty()) {
+                    out.add(line.trim());
+                }
+            }
+        }
+        return out;
+    }
 }

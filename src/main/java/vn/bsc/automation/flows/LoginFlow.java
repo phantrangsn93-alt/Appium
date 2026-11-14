@@ -70,7 +70,7 @@ public class LoginFlow {
             // previous test -> go back one level. Only while our app is in front (never Back out of another app).
             if (++misses[0] % 3 == 0 && isOurAppInFront()) {
                 LOG.info("Unknown screen - pressing Back");
-                DriverManager.getDriver().navigate().back();
+                vn.bsc.automation.core.driver.DeviceActions.back(); // iOS: app "<" / edge swipe (no system Back)
             }
             return false;
         }, AppConfig.appLaunchTimeout());

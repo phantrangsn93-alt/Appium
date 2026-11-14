@@ -1,5 +1,7 @@
 package vn.bsc.automation.data;
 
+import vn.bsc.automation.core.config.ConfigReader;
+
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
  * exchange  HOSE | HNX | UPCOM | DERIVATIVE
  * symbol    stock / derivative code
  * orderType LO | ATO | ATC | MTL | MOK | MAK | PLO | MARKET (UPCOM: market tab, price = ceiling) | ODDLOT (LO, qty &lt; 100)
+ *           | STOP_LIMIT | TRAILING_STOP | OCO | TPSL (take profit / stop loss from the portfolio)
  *           conditional ("Điều kiện"): STOP_LIMIT | TRAILING_STOP | OCO
  * price     LO / ODDLOT: limit price; STOP_LIMIT: "Giá đặt" (empty = keep the app's auto value);
  *           OCO: "Giá đặt" of the LO leg. Syntax: see {@link PriceSpec} (REF | CEIL | FLOOR | HINT[+-n] | number)
@@ -74,11 +77,49 @@ public record OrderCase(String id, boolean enabled, String excelNo, String descr
     }
 
     public static List<OrderCase> load(String resource) {
-        return CsvReader.read(resource).stream().map(OrderCase::from).collect(Collectors.toList());
+        return CsvReader.read(resource).stream().map(OrderCase::from).map(OrderCase::withConfiguredSymbol)
+                .collect(Collectors.toList());
     }
 
-    /** Real sub-account name prefix to select in the app (type resolved through config). */
+    /**
+     * Symbol override from config (empty = keep the CSV symbol), most specific first:
+     * order.symbol.&lt;buy|sell&gt;.&lt;HOSE|HNX|UPCOM|DERIVATIVE&gt; &gt; order.symbol.&lt;exchange&gt; &gt;
+     * order.symbol.&lt;buy|sell&gt; (stocks only, not derivatives).
+     */
+    /** Same case on another symbol / quantity (TP/SL: the holding actually picked in Danh mục). */
+    public OrderCase withTarget(String newSymbol, long newQuantity) {
+        return new OrderCase(id, enabled, excelNo, description, subAccount, side, exchange, newSymbol, orderType, price,
+                newQuantity, sessions, outOfSession, validity, triggerPrice, amplitude, priceStep);
+    }
+
+    OrderCase withConfiguredSymbol() {
+        String s = side.name().toLowerCase(Locale.ROOT);
+        String v = ConfigReader.get("order.symbol." + s + "." + exchange.toLowerCase(Locale.ROOT));
+        if (v == null) {
+            v = ConfigReader.get("order.symbol." + exchange.toLowerCase(Locale.ROOT));
+        }
+        if (v == null && !"DERIVATIVE".equals(exchange)) {
+            v = ConfigReader.get("order.symbol." + s);
+        }
+        if (v == null || v.isBlank()) {
+            return this;
+        }
+        return new OrderCase(id, enabled, excelNo, description, subAccount, side, exchange, v.trim().toUpperCase(Locale.ROOT),
+                orderType, price, quantity, sessions, outOfSession, validity, triggerPrice, amplitude, priceStep);
+    }
+
+    /**
+     * Real sub-account name prefix to select in the app. order.subaccount.&lt;buy|sell&gt; (config / .env
+     * ORDER_SUBACCOUNT_BUY) overrides stock orders; otherwise the CSV type (CO_SO / MARGIN / PHAI_SINH) is resolved
+     * through config (subaccount.coso ...). Derivative orders always use the derivative sub-account.
+     */
     public String subAccountName() {
+        if (!"PHAI_SINH".equals(subAccount)) {
+            String o = ConfigReader.get("order.subaccount." + side.name().toLowerCase(Locale.ROOT));
+            if (o != null && !o.isBlank()) {
+                return o.trim();
+            }
+        }
         return SubAccount.resolve(subAccount);
     }
 
@@ -95,7 +136,15 @@ public record OrderCase(String id, boolean enabled, String excelNo, String descr
      * activated: conditional orders AND multi-day LO (LO-GTC) - seen on production 2.0.20.
      */
     public boolean inConditionalBook() {
-        return isConditional() || ("LO".equals(orderType) && validity == Validity.GTC);
+        return isConditional() || isTpSl() || ("LO".equals(orderType) && validity == Validity.GTC);
+    }
+
+    /**
+     * TPSL: take profit / stop loss on a HELD symbol, placed from Giao dịch &gt; Danh mục (not the order form).
+     * price = take-profit spec, triggerPrice = stop-loss spec, both relative to the sheet hints ("HINT+0.1").
+     */
+    public boolean isTpSl() {
+        return "TPSL".equals(orderType);
     }
 
     public boolean isOddLot() {

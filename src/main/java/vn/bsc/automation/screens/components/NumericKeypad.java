@@ -47,8 +47,20 @@ public class NumericKeypad extends BaseScreen {
 
     /** Closes the keypad and waits until it is gone (while closing it still hides the form's semantics). */
     public void close() {
-        tap(closeKey);
-        vn.bsc.automation.core.utils.WaitUtils.waitInvisible(digitKey, java.time.Duration.ofSeconds(5));
+        for (int i = 0; i < 3; i++) {
+            // the keypad's "Đóng" is the LOWEST one: other "Đóng" (e.g. a sheet closed earlier) may linger in the tree
+            UiNode close = UiNode.snapshot(driver().getPageSource()).stream()
+                    .filter(n -> "Đóng".equals(n.desc()))
+                    .max(java.util.Comparator.comparingInt(UiNode::y)).orElse(null);
+            if (close == null) {
+                return;
+            }
+            tapCenterOf(close);
+            if (vn.bsc.automation.core.utils.WaitUtils.waitInvisible(digitKey, java.time.Duration.ofSeconds(3))) {
+                return;
+            }
+        }
+        throw new AssertionError("Không đóng được bàn phím số");
     }
 
     /** Backspace = right-most key of the lowest key row (no content-desc). */
