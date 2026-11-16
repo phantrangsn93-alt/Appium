@@ -97,7 +97,7 @@ public class ContentInspector extends BaseScreen {
                 if (!pending && !v.isEmpty()) {
                     break;
                 }
-                WaitUtils.condition(() -> false, Duration.ofMillis(700));
+                WaitUtils.pause(Duration.ofMillis(700));
             } while (System.currentTimeMillis() < deadline);
             List<UiNode> page = content();
             String signature = page.stream().map(UiNode::desc).reduce("", String::concat);
@@ -190,7 +190,7 @@ public class ContentInspector extends BaseScreen {
     /** Taps the on-screen node whose label equals {@code label} (ignores copies kept off-screen by Flutter). */
     public boolean tapVisible(String label) {
         Optional<UiNode> n = content().stream().filter(x -> label.equals(x.desc())).findFirst();
-        n.ifPresent(x -> GestureUtils.tap(x.x() + x.width() / 2, x.y() + x.height() / 2));
+        n.ifPresent(x -> GestureUtils.tap(x));
         return n.isPresent();
     }
 

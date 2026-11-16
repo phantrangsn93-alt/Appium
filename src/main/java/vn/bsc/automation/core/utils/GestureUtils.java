@@ -11,6 +11,8 @@ import vn.bsc.automation.core.driver.DriverManager;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import org.openqa.selenium.remote.RemoteWebElement;
+import vn.bsc.automation.core.config.Platform;
 
 /** W3C Actions / mobile: gestures (TouchAction is deprecated and not used). */
 public final class GestureUtils {
@@ -28,6 +30,11 @@ public final class GestureUtils {
     }
 
     /** Tap the geometric centre of an element (for Flutter widgets that ignore accessibility click). */
+    /** Taps the centre of a page-source node. */
+    public static void tap(UiNode n) {
+        tap(n.centerX(), n.centerY());
+    }
+
     public static void tapCenter(WebElement el) {
         Rectangle r = el.getRect();
         tap(r.getX() + r.getWidth() / 2, r.getY() + r.getHeight() / 2);
@@ -66,7 +73,7 @@ public final class GestureUtils {
 
     /** Native UiAutomator2 swipe gesture inside an element (e.g. horizontal carousel). */
     public static void swipeIn(WebElement el, String direction, double percent) {
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        if (Platform.ios()) {
             Rectangle r = el.getRect();
             int cx = r.getX() + r.getWidth() / 2, cy = r.getY() + r.getHeight() / 2;
             int dx = (int) (r.getWidth() * percent / 2), dy = (int) (r.getHeight() * percent / 2);
@@ -81,7 +88,7 @@ public final class GestureUtils {
             return;
         }
         DriverManager.getDriver().executeScript("mobile: swipeGesture", Map.of(
-                "elementId", ((org.openqa.selenium.remote.RemoteWebElement) el).getId(),
+                "elementId", ((RemoteWebElement) el).getId(),
                 "direction", direction,
                 "percent", percent));
     }

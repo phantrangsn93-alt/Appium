@@ -11,6 +11,8 @@ import vn.bsc.automation.base.LoggedInBaseTest;
 import vn.bsc.automation.screens.AssetScreen;
 import vn.bsc.automation.screens.OrderBookScreen;
 import vn.bsc.automation.screens.PortfolioScreen;
+import vn.bsc.automation.core.driver.DriverManager;
+import vn.bsc.automation.core.utils.UiNode;
 
 /** Read-only checks of Sổ lệnh / Danh mục / Tài sản. No cancel / modify action is performed. */
 @Epic("BSC Mobile Trading")
@@ -59,8 +61,8 @@ public class TradingInfoTest extends LoggedInBaseTest {
             soft.assertThat(a.isPeriodVisible(period)).as("Kỳ " + period).isTrue();
         }
         // "Thặng dư ký quỹ" exists only on margin sub-accounts (MR...): not on "Thường"
-        boolean margin = vn.bsc.automation.core.utils.UiNode.snapshot(
-                        vn.bsc.automation.core.driver.DriverManager.getDriver().getPageSource()).stream()
+        boolean margin = UiNode.snapshot(
+                        DriverManager.getDriver().getPageSource()).stream()
                 .anyMatch(n -> n.desc().matches("(?s)(.*\\n)?MR[^\\n]* - [0-9]+"));
         for (String item : AssetScreen.BREAKDOWN_ITEMS) {
             if ("Thặng dư ký quỹ".equals(item) && !margin) {

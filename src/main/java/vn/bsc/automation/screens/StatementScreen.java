@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
+import java.util.Comparator;
 
 /**
  * Statement-like screens of "Quản lý tài khoản" (Sao kê tiền / Sao kê chứng khoán / histories): sub-account,
@@ -43,7 +44,7 @@ public class StatementScreen extends MenuTargetScreen {
                 .orElseThrow(() -> new AssertionError("Không thấy ô Từ ngày"));
         List<UiNode> dates = nodes.stream()
                 .filter(n -> DATE.matcher(n.desc()).matches() && n.y() > labelsY && n.y() < labelsY + 120)
-                .sorted(java.util.Comparator.comparingInt(UiNode::x)).toList();
+                .sorted(Comparator.comparingInt(UiNode::x)).toList();
         if (dates.size() < 2) {
             throw new AssertionError("Không đọc được Từ ngày / Đến ngày: " + dates);
         }
@@ -69,11 +70,11 @@ public class StatementScreen extends MenuTargetScreen {
     }
 
     private void pick(UiNode field, LocalDate date) {
-        GestureUtils.tap(field.x() + field.width() / 2, field.y() + field.height() / 2);
+        GestureUtils.tap(field);
         DatePicker picker = new DatePicker();
         picker.waitUntilLoaded();
         picker.choose(date);
-        WaitUtils.condition(() -> false, Duration.ofSeconds(2)); // list reloads
+        WaitUtils.pause(Duration.ofSeconds(2)); // list reloads
     }
 
     /** Message of a dialog shown after a filter change (validation), or empty. */
@@ -132,7 +133,7 @@ public class StatementScreen extends MenuTargetScreen {
     public String switchSubAccount() {
         String current = fieldValue("Tiểu khoản");
         tapField("Tiểu khoản");
-        WaitUtils.condition(() -> false, Duration.ofSeconds(2));
+        WaitUtils.pause(Duration.ofSeconds(2));
         List<UiNode> options = UiNode.snapshot(driver().getPageSource()).stream()
                 .filter(n -> n.clickable() && n.desc().matches("(?s).* - [0-9]{6,}.*") && !n.desc().startsWith("Tiểu khoản")
                         && !n.desc().contains(current.replaceAll(".*-\\s*", "")))
@@ -142,7 +143,7 @@ public class StatementScreen extends MenuTargetScreen {
             return null;
         }
         UiNode o = options.get(0);
-        GestureUtils.tap(o.x() + o.width() / 2, o.y() + o.height() / 2);
+        GestureUtils.tap(o);
         WaitUtils.condition(() -> !fieldValue("Tiểu khoản").equals(current), Duration.ofSeconds(5));
         return fieldValue("Tiểu khoản");
     }

@@ -7,7 +7,7 @@ import java.util.Locale;
 import java.util.Optional;
 
 /**
- * Sub-account TYPE used in test data ({@code orders.csv}, {@code order.json}) instead of the account-specific name.
+ * Sub-account TYPE used in test data ({@code orders.csv}) instead of the account-specific name.
  * The real name prefix shown in the app is configured per environment / account:
  * <pre>
  *   subaccount.coso      (env SUBACCOUNT_COSO)      e.g. Thường

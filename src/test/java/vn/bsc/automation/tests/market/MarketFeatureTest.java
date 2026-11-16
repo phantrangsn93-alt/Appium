@@ -27,6 +27,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import org.openqa.selenium.Point;
+import vn.bsc.automation.core.driver.DriverManager;
+import vn.bsc.automation.core.utils.GestureUtils;
 
 /**
  * Thị trường > Tổng quan features: quick actions, featured-function settings, market-index settings, heat map,
@@ -90,8 +93,8 @@ public class MarketFeatureTest extends LoggedInBaseTest {
                 }
                 case "tab" -> assertThat(new TradingScreen().isDisplayed(LOAD)).as(label + " -> Giao dịch / tab " + target).isTrue();
                 case "chart" -> {
-                    WaitUtils.condition(() -> false, Duration.ofSeconds(5)); // WebView chart: no UI signal to wait on
-                    int h = vn.bsc.automation.core.driver.DriverManager.getDriver().manage().window().getSize().getHeight();
+                    WaitUtils.pause(Duration.ofSeconds(5)); // WebView chart: no UI signal to wait on
+                    int h = DriverManager.getDriver().manage().window().getSize().getHeight();
                     double r = inspector.colouredPixelRatio((int) (h * 0.12), (int) (h * 0.6));
                     AllureUtils.attachScreenshot(label + String.format(" (%.2f%%)", r * 100));
                     assertThat(r).as(label + " - biểu đồ nến trống").isGreaterThanOrEqualTo(MIN_IMAGE_RATIO);
@@ -103,7 +106,7 @@ public class MarketFeatureTest extends LoggedInBaseTest {
             }
         } finally {
             if (!"tab".equals(kind) && !"priceboard".equals(kind) && !"dialog".equals(kind)) {
-                m.pressBack(); // leave without saving anything
+                m.backToHome(); // leave without saving anything
             }
         }
     }
@@ -155,13 +158,13 @@ public class MarketFeatureTest extends LoggedInBaseTest {
         try {
             assertThat(visible(hm.get("title").asText())).as("Màn " + hm.get("title").asText()).isTrue();
             assertThat(inspector.tapVisible(filter)).as("Bộ lọc " + filter).isTrue();
-            WaitUtils.condition(() -> false, Duration.ofSeconds(3)); // canvas re-draw
-            int h = vn.bsc.automation.core.driver.DriverManager.getDriver().manage().window().getSize().getHeight();
+            WaitUtils.pause(Duration.ofSeconds(3)); // canvas re-draw
+            int h = DriverManager.getDriver().manage().window().getSize().getHeight();
             double r = inspector.colouredPixelRatio((int) (h * 0.25), (int) (h * 0.85));
             AllureUtils.attachScreenshot("Bản đồ nhiệt " + filter + String.format(" (%.2f%%)", r * 100));
             assertThat(r).as("Bản đồ nhiệt " + filter + " trống").isGreaterThanOrEqualTo(MIN_IMAGE_RATIO);
         } finally {
-            m.pressBack();
+            m.backToHome();
         }
     }
 
@@ -189,13 +192,13 @@ public class MarketFeatureTest extends LoggedInBaseTest {
                 By t = Locators.tab(tab);
                 if (!WaitUtils.isVisible(t, Duration.ofSeconds(2))) {
                     // scrollable tab bar: reveal tabs on the right
-                    int w = vn.bsc.automation.core.driver.DriverManager.getDriver().manage().window().getSize().getWidth();
+                    int w = DriverManager.getDriver().manage().window().getSize().getWidth();
                     UiNode bar = inspector.content().stream().filter(n -> n.desc().contains("trong tổng số")).findFirst().orElseThrow();
-                    vn.bsc.automation.core.utils.GestureUtils.swipe(new org.openqa.selenium.Point((int) (w * 0.85), bar.y() + bar.height() / 2),
-                            new org.openqa.selenium.Point((int) (w * 0.15), bar.y() + bar.height() / 2), Duration.ofMillis(400));
+                    GestureUtils.swipe(new Point((int) (w * 0.85), bar.y() + bar.height() / 2),
+                            new Point((int) (w * 0.15), bar.y() + bar.height() / 2), Duration.ofMillis(400));
                 }
                 inspector.content().stream().filter(n -> n.desc().startsWith(tab + "\n") && n.desc().contains("trong tổng số"))
-                        .findFirst().ifPresent(n -> vn.bsc.automation.core.utils.GestureUtils.tap(n.x() + n.width() / 2, n.y() + n.height() / 2));
+                        .findFirst().ifPresent(n -> GestureUtils.tap(n));
             }
             int below = inspector.content().stream()
                     .filter(n -> n.desc().contains("trong tổng số") || n.desc().equals(title))
@@ -205,7 +208,7 @@ public class MarketFeatureTest extends LoggedInBaseTest {
             AllureUtils.attachScreenshot(label);
             assertThat(rows).as(label + ": không có dữ liệu").isNotEmpty();
         } finally {
-            m.pressBack();
+            m.backToHome();
         }
     }
 }

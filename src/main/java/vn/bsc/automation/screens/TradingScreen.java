@@ -3,6 +3,9 @@ package vn.bsc.automation.screens;
 import org.openqa.selenium.By;
 import vn.bsc.automation.core.base.BaseScreen;
 import vn.bsc.automation.core.utils.Locators;
+import java.time.Duration;
+import vn.bsc.automation.core.utils.AllureUtils;
+import vn.bsc.automation.screens.components.AlertDialog;
 
 /** "Giao dịch" container with 4 tabs: Đặt lệnh / Sổ lệnh / Danh mục / Tài sản. */
 public class TradingScreen extends BaseScreen {
@@ -34,11 +37,11 @@ public class TradingScreen extends BaseScreen {
      * "Lỗi :ACCOUNTID_NOT_EXIT"). It is recorded in the report and closed so the flow can switch sub-account.
      */
     public void dismissTransientError() {
-        vn.bsc.automation.screens.components.AlertDialog d = new vn.bsc.automation.screens.components.AlertDialog();
-        if (d.isShown(java.time.Duration.ofSeconds(1)) && d.hasButton(vn.bsc.automation.screens.components.AlertDialog.BTN_CLOSE)) {
+        AlertDialog d = new AlertDialog();
+        if (d.isShown(Duration.ofSeconds(1)) && d.hasButton(AlertDialog.BTN_CLOSE)) {
             String msg = d.getMessage();
             log.warn("App error on Giao dịch: {}", msg);
-            vn.bsc.automation.core.utils.AllureUtils.attachText("Cảnh báo: lỗi khi mở Giao dịch", msg);
+            AllureUtils.attachText("Cảnh báo: lỗi khi mở Giao dịch", msg);
             d.close();
         }
     }

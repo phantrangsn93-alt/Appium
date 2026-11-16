@@ -1,5 +1,6 @@
 package vn.bsc.automation.tests.excel;
 
+import vn.bsc.automation.data.OrderSpec;
 import io.qameta.allure.Allure;
 import io.qameta.allure.Description;
 import io.qameta.allure.Epic;
@@ -22,6 +23,7 @@ import vn.bsc.automation.data.OrderCase;
 import vn.bsc.automation.data.OrderRegistry;
 import vn.bsc.automation.data.OrderRegistry.PlacedOrder;
 import vn.bsc.automation.flows.OrderFlow;
+import vn.bsc.automation.flows.OrderResultReader;
 import vn.bsc.automation.flows.OrderFlow.Outcome;
 import vn.bsc.automation.screens.OrderBookScreen;
 import vn.bsc.automation.screens.OrderFormScreen;
@@ -35,6 +37,10 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.math.BigDecimal;
+import java.util.Comparator;
+import java.util.regex.Pattern;
+import vn.bsc.automation.core.config.ConfigReader;
 
 /**
  * Excel "Kiểm tra Lệnh" No.2-8 - DATA-DRIVEN:
@@ -67,8 +73,8 @@ public class ExcelOrderTest extends LoggedInBaseTest {
     @DataProvider(name = "orders")
     public Object[][] orders() {
         // -Dorders.include=<regex on id>, e.g. "EX1[0-5].*" = conditional orders only
-        java.util.regex.Pattern include = java.util.regex.Pattern.compile(
-                vn.bsc.automation.core.config.ConfigReader.get("orders.include", ".*"));
+        Pattern include = Pattern.compile(
+                ConfigReader.get("orders.include", ".*"));
         return OrderCase.load("testdata/orders.csv").stream()
                 .filter(OrderCase::enabled).filter(c -> include.matcher(c.id()).matches())
                 .filter(c -> !c.isConditional() && !c.isTpSl())
@@ -78,8 +84,8 @@ public class ExcelOrderTest extends LoggedInBaseTest {
     /** Conditional orders (Stop Limit / Trailing Stop / OCO) and TP/SL - run AFTER the normal orders' modify/cancel. */
     @DataProvider(name = "conditionalOrders")
     public Object[][] conditionalOrders() {
-        java.util.regex.Pattern include = java.util.regex.Pattern.compile(
-                vn.bsc.automation.core.config.ConfigReader.get("orders.include", ".*"));
+        Pattern include = Pattern.compile(
+                ConfigReader.get("orders.include", ".*"));
         return OrderCase.load("testdata/orders.csv").stream()
                 .filter(OrderCase::enabled).filter(c -> include.matcher(c.id()).matches())
                 .filter(c -> c.isConditional() || c.isTpSl())
@@ -89,12 +95,12 @@ public class ExcelOrderTest extends LoggedInBaseTest {
     @DataProvider(name = "actions")
     public Object[][] actions() {
         // -Dactions.include=<regex on id>; "none" skips modify/cancel (e.g. when running a subset of orders)
-        java.util.regex.Pattern include = java.util.regex.Pattern.compile(
-                vn.bsc.automation.core.config.ConfigReader.get("actions.include", ".*"));
+        Pattern include = Pattern.compile(
+                ConfigReader.get("actions.include", ".*"));
         return OrderActionCase.load("testdata/order_actions.csv").stream()
                 .filter(OrderActionCase::enabled).filter(a -> include.matcher(a.id()).matches())
                 // all MODIFY cases first (they need live orders), then CANCEL, CANCEL_ALL last; stable within a group
-                .sorted(java.util.Comparator.comparingInt(a -> a.action().ordinal()))
+                .sorted(Comparator.comparingInt(a -> a.action().ordinal()))
                 .map(a -> new Object[]{a}).toArray(Object[][]::new);
     }
 
@@ -122,34 +128,48 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         Allure.parameter("Thời điểm", ZonedDateTime.now(TradingSession.VN).toString());
 
         // rows of this order already in the book (same symbol/side/qty/type) - to detect the new one afterwards
-        OrderBookScreen.OrderSpec probe = probeSpec(c);
+        OrderSpec probe = probeSpec(c);
         int rowsBefore = navigator.openTrading().openOrderBook().count(probe, OrderBookScreen.placedStatus(probe));
 
-        Outcome out = c.isTpSl() ? orderFlow.placeTpSl(c) : orderFlow.place(c);
+        Outcome out;
+        try {
+            out = c.isTpSl() ? orderFlow.placeTpSl(c) : orderFlow.place(c);
+        } catch (RuntimeException | AssertionError e) {
+            // an error AFTER "Xác nhận" can still leave a live order: register any new row so the safety net cancels it
+            registerIfInBook(c, probe, rowsBefore, null, "Lỗi khi đặt lệnh: " + e.getMessage());
+            throw e;
+        }
         if (c.isTpSl() && orderFlow.lastTpSlTarget() != null) {
             c = orderFlow.lastTpSlTarget(); // verify / cancel the holding actually picked (may differ from the CSV symbol)
             Allure.parameter("Mã TP/SL thực tế", c.symbol() + " x" + c.quantity());
         }
         boolean messageCaptured = !out.message().isBlank();
-        if (!out.success() && !messageCaptured) {
-            // No dialog / toast caught: the order book is the source of truth
-            int rowsAfter = navigator.openTrading().openOrderBook().count(probe, OrderBookScreen.placedStatus(probe));
+        boolean registered = false;
+        if (!out.success()) {
+            // the order book is the source of truth: a new row means the order IS live, whatever the message said
+            int rowsAfter = rowsInBook(probe);
             Allure.addAttachment("Sổ lệnh trước / sau", rowsBefore + " -> " + rowsAfter + " dòng " + probe);
             if (rowsAfter > rowsBefore) {
-                out = new Outcome(true, "", out.price(), out.balanceBefore());
+                if (!messageCaptured) {
+                    out = new Outcome(true, "", out.price(), out.balanceBefore());
+                } else {
+                    LOG.error("[{}] App báo '{}' nhưng Sổ lệnh có lệnh mới {} - ghi nhận để tự huỷ", c.id(), out.message(), probe);
+                    registerPlaced(c, out.price(), "Sổ lệnh có lệnh mới dù app báo: " + out.message());
+                    registered = true;
+                }
             }
         }
         PlacedOrder placed = null;
-        if (out.success()) {
+        if (out.success() && !registered) {
             // ATO/ATC/MTL have no price on the form: take it from "Đặt mua AAA KL 100 giá 7,460.00 thành công!"
-            java.math.BigDecimal price = out.price() != null ? out.price() : OrderFlow.priceFromMessage(out.message());
+            BigDecimal price = out.price() != null ? out.price() : OrderResultReader.priceFromMessage(out.message());
             placed = new PlacedOrder(c, c.subAccountName(), price, c.quantity(), LocalDateTime.now(), out.message());
             OrderRegistry.register(placed);
         }
         LOG.info("[{}] inSession={} success={} message='{}'", c.id(), inSession, out.success(), out.message());
 
         // System errors are always FAIL (never counted as the expected out-of-session rejection)
-        assertThat(OrderFlow.isSystemError(out.message()))
+        assertThat(OrderResultReader.isSystemError(out.message()))
                 .as("[%s] Lỗi hệ thống khi đặt lệnh: %s", c.id(), out.message()).isFalse();
 
         if (inSession) {
@@ -184,35 +204,38 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         switch (a.action()) {
             case MODIFY -> {
                 PlacedOrder o = target(a);
-                OrderBookScreen.OrderSpec oldSpec = OrderBookScreen.OrderSpec.of(o);
+                OrderSpec oldSpec = OrderSpec.of(o);
                 OrderBookScreen.Modified m = book.modify(o, a.priceSteps(), a.newQuantity(), new OrderFormScreen());
                 Outcome out = orderFlow.readResult(o.price());
-                assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi sửa lệnh: %s", a.id(), out.message()).isFalse();
-                assertThat(out.success()).as("[%s] Sửa lệnh thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
-                OrderRegistry.updateQuantity(o.source().id(), m.quantity()); // later cancel targets the NEW order
-                if (m.price() != null) {
-                    OrderRegistry.updatePrice(o.source().id(), m.price());
-                }
-                // old order -> "Đã sửa"; a new order with the updated price / quantity -> "Đã gửi"/"Chờ gửi"
-                OrderBookScreen.OrderSpec newSpec = oldSpec.withPriceAndQty(m.price(), m.quantity());
+                // old order -> "Đã sửa"; a new order with the updated price / quantity -> "Đã gửi"/"Chờ gửi".
+                // The registry follows the BOOK (not the message) BEFORE any assert, so later cancels and the safety
+                // net always target the order that is really live.
+                OrderSpec newSpec = oldSpec.withPriceAndQty(m.price(), m.quantity());
                 OrderBookScreen after = navigator.openTrading().openOrderBook();
+                Optional<UiNode> newRow = after.waitFor(newSpec, OrderBookScreen.STATUS_PLACED, BOOK_TIMEOUT);
+                if (newRow.isPresent()) {
+                    OrderRegistry.updateQuantity(o.source().id(), m.quantity());
+                    if (m.price() != null) {
+                        OrderRegistry.updatePrice(o.source().id(), m.price());
+                    }
+                }
+                assertThat(OrderResultReader.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi sửa lệnh: %s", a.id(), out.message()).isFalse();
                 SoftAssertions soft = new SoftAssertions();
+                soft.assertThat(out.success() || (out.message().isBlank() && newRow.isPresent()))
+                        .as("[%s] Sửa lệnh thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
                 soft.assertThat(after.waitFor(oldSpec, OrderBookScreen.STATUS_MODIFIED, BOOK_TIMEOUT))
                         .as("[%s] Lệnh cũ %s chuyển trạng thái Đã sửa", a.id(), oldSpec).isPresent();
-                soft.assertThat(after.waitFor(newSpec, OrderBookScreen.STATUS_PLACED, BOOK_TIMEOUT))
-                        .as("[%s] Sinh lệnh mới %s (Đã gửi/Chờ gửi)", a.id(), newSpec).isPresent();
+                soft.assertThat(newRow).as("[%s] Sinh lệnh mới %s (Đã gửi/Chờ gửi)", a.id(), newSpec).isPresent();
                 soft.assertAll();
             }
             case CANCEL -> {
                 PlacedOrder o = target(a);
                 book.cancel(o);
                 Outcome out = orderFlow.readResult(o.price());
-                assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi huỷ lệnh: %s", a.id(), out.message()).isFalse();
+                boolean cancelled = confirmCancelled(o);
+                assertThat(OrderResultReader.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi huỷ lệnh: %s", a.id(), out.message()).isFalse();
                 assertThat(out.success()).as("[%s] Huỷ lệnh thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
-                OrderRegistry.markClosed(o.source().id());
-                OrderBookScreen.OrderSpec spec = OrderBookScreen.OrderSpec.of(o);
-                assertThat(navigator.openTrading().openOrderBook().waitFor(spec, OrderBookScreen.STATUS_CANCELLED, BOOK_TIMEOUT))
-                        .as("[%s] Lệnh %s chuyển trạng thái Đã huỷ", a.id(), spec).isPresent();
+                assertThat(cancelled).as("[%s] Lệnh %s chuyển trạng thái Đã huỷ", a.id(), OrderSpec.of(o)).isTrue();
             }
             case CANCEL_ALL -> {
                 List<PlacedOrder> pending = OrderRegistry.pending();
@@ -221,19 +244,29 @@ public class ExcelOrderTest extends LoggedInBaseTest {
                 }
                 book.cancelAllOnlyTestOrders(pending);
                 Outcome out = orderFlow.readResult(null);
-                assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi huỷ tất cả: %s", a.id(), out.message()).isFalse();
-                assertThat(out.success()).as("[%s] Huỷ tất cả thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
-                pending.forEach(o -> OrderRegistry.markClosed(o.source().id()));
-                OrderBookScreen after = navigator.openTrading().openOrderBook();
                 SoftAssertions soft = new SoftAssertions();
-                for (PlacedOrder o : pending) {
-                    OrderBookScreen.OrderSpec spec = OrderBookScreen.OrderSpec.of(o);
-                    soft.assertThat(after.waitFor(spec, OrderBookScreen.STATUS_CANCELLED, BOOK_TIMEOUT))
-                            .as("[%s] Lệnh %s (%s) chuyển trạng thái Đã huỷ", a.id(), o.source().id(), spec).isPresent();
+                for (PlacedOrder o : pending) { // each order is closed only when the book shows it cancelled
+                    soft.assertThat(confirmCancelled(o))
+                            .as("[%s] Lệnh %s (%s) chuyển trạng thái Đã huỷ", a.id(), o.source().id(), OrderSpec.of(o)).isTrue();
                 }
+                assertThat(OrderResultReader.isSystemError(out.message())).as("[%s] Lỗi hệ thống khi huỷ tất cả: %s", a.id(), out.message()).isFalse();
+                soft.assertThat(out.success()).as("[%s] Huỷ tất cả thành công. Hệ thống trả: %s", a.id(), out.message()).isTrue();
                 soft.assertAll();
             }
         }
+    }
+
+    /** True (and the order is closed in the registry) only when the book shows it "Đã huỷ". */
+    private boolean confirmCancelled(PlacedOrder o) {
+        OrderSpec spec = OrderSpec.of(o);
+        boolean cancelled = navigator.openTrading().openOrderBook()
+                .waitFor(spec, OrderBookScreen.STATUS_CANCELLED, BOOK_TIMEOUT).isPresent();
+        if (cancelled) {
+            OrderRegistry.markClosed(o.source().id());
+        } else {
+            LOG.error("Lệnh {} ({}) CHƯA thấy trạng thái Đã huỷ trong Sổ lệnh - vẫn coi là còn chờ", o.source().id(), spec);
+        }
+        return cancelled;
     }
 
     // ------------------------------------------------------------------ post-conditions
@@ -257,24 +290,24 @@ public class ExcelOrderTest extends LoggedInBaseTest {
             Allure.addAttachment("(1) Thông báo thành công", "KHÔNG XÁC ĐỊNH: không bắt được thông báo (hiển thị quá nhanh); "
                     + "lệnh đã được xác nhận qua Sổ lệnh. Xem ảnh 'Sau khi Xác nhận +n'.");
         } else {
-            soft.assertThat(OrderFlow.isSideSuccessMessage(c.side(), out.message()))
+            soft.assertThat(OrderResultReader.isSideSuccessMessage(c.side(), out.message()))
                     .as("[%s] (1) Thông báo đặt lệnh %s thành công. Hệ thống trả: '%s'", c.id(), side, out.message()).isTrue();
         }
 
-        OrderBookScreen.OrderSpec spec = OrderBookScreen.OrderSpec.of(placed);
+        OrderSpec spec = OrderSpec.of(placed);
         // conditional / TP/SL / LO-GTC: "Chờ kích hoạt"; normal: "Đã gửi" in session, "Chờ gửi" out of session
-        java.util.regex.Pattern status = c.inConditionalBook() ? OrderBookScreen.STATUS_CONDITIONAL_PLACED
+        Pattern status = c.inConditionalBook() ? OrderBookScreen.STATUS_CONDITIONAL_PLACED
                 : inSession ? OrderBookScreen.STATUS_SENT : OrderBookScreen.STATUS_QUEUED;
         String expected = c.inConditionalBook() ? "Chờ kích hoạt" : inSession ? "Đã gửi" : "Chờ gửi";
         Optional<UiNode> row = navigator.openTrading().openOrderBook().waitFor(spec, status, BOOK_TIMEOUT);
-        row.ifPresent(r -> Allure.addAttachment("Dòng lệnh trong Sổ lệnh", OrderBookScreen.text(r)));
+        row.ifPresent(r -> Allure.addAttachment("Dòng lệnh trong Sổ lệnh", OrderSpec.text(r)));
         soft.assertThat(row).as("[%s] (2) Sổ lệnh có lệnh %s với trạng thái %s", c.id(), spec, expected).isPresent();
 
         // (3) business rule: normal BUY -> Sức mua decreases; normal SELL -> KL khả dụng decreases by the quantity;
         //     conditional orders (incl. LO-GTC) -> balance UNCHANGED (nothing is held until activation)
         if (c.inConditionalBook() && out.balanceBefore() != null) {
             long before = out.balanceBefore();
-            long after = orderFlow.readBalanceAfter(c, before, java.time.Duration.ofSeconds(6)); // no change expected
+            long after = orderFlow.readBalanceAfter(c, before, Duration.ofSeconds(6)); // no change expected
             String what = c.side() == OrderCase.Side.BUY ? "Sức mua" : "KL khả dụng";
             Allure.addAttachment(what + " trước / sau (lệnh điều kiện)", before + " -> " + after);
             soft.assertThat(after).as("[%s] (3) Lệnh điều kiện: %s không đổi (trước %,d)", c.id(), what, before)
@@ -298,14 +331,35 @@ public class ExcelOrderTest extends LoggedInBaseTest {
         soft.assertAll();
     }
 
+    private int rowsInBook(OrderSpec probe) {
+        return navigator.openTrading().openOrderBook().count(probe, OrderBookScreen.placedStatus(probe));
+    }
+
+    private void registerPlaced(OrderCase c, BigDecimal price, String note) {
+        OrderRegistry.register(new PlacedOrder(c, c.subAccountName(), price, c.quantity(), LocalDateTime.now(), note));
+    }
+
+    /** After a failed / interrupted placement: registers the order when a new row of it is in the book. */
+    private void registerIfInBook(OrderCase c, OrderSpec probe, int rowsBefore, BigDecimal price, String note) {
+        try {
+            OrderCase target = c.isTpSl() && orderFlow.lastTpSlTarget() != null ? orderFlow.lastTpSlTarget() : c;
+            if (rowsInBook(probe) > rowsBefore) {
+                LOG.error("[{}] {} - Sổ lệnh có lệnh mới {}: ghi nhận để tự huỷ", c.id(), note, probe);
+                registerPlaced(target, price, note);
+            }
+        } catch (RuntimeException | AssertionError check) {
+            LOG.error("[{}] Không kiểm tra được Sổ lệnh sau lỗi đặt lệnh ({}) - CẦN KIỂM TRA TAY", c.id(), check.getMessage());
+        }
+    }
+
     /** Book identity of a row BEFORE the price is known (normal orders: any price). */
-    private static OrderBookScreen.OrderSpec probeSpec(OrderCase c) {
+    private static OrderSpec probeSpec(OrderCase c) {
         boolean buy = c.side() == OrderCase.Side.BUY;
         if (c.inConditionalBook()) {
-            return new OrderBookScreen.OrderSpec(c.symbol(), buy, c.quantity(), null,
-                    OrderBookScreen.OrderSpec.conditionalLabel(c.orderType()), true);
+            return new OrderSpec(c.symbol(), buy, c.quantity(), null,
+                    OrderSpec.conditionalLabel(c.orderType()), true);
         }
-        return new OrderBookScreen.OrderSpec(c.symbol(), buy, c.quantity(), null, c.isMarketType() ? c.orderType() : null, false);
+        return new OrderSpec(c.symbol(), buy, c.quantity(), null, c.isMarketType() ? c.orderType() : null, false);
     }
 
     private PlacedOrder target(OrderActionCase a) {
@@ -329,8 +383,9 @@ public class ExcelOrderTest extends LoggedInBaseTest {
             try {
                 OrderBookScreen book = navigator.openTrading().openOrderBook();
                 book.cancel(o);
-                if (orderFlow.readResult(o.price()).success()) {
-                    OrderRegistry.markClosed(o.source().id());
+                orderFlow.readResult(o.price());
+                if (!confirmCancelled(o)) {
+                    LOG.error("KHÔNG xác nhận được lệnh {} đã huỷ - cần kiểm tra / huỷ tay trong Sổ lệnh", o.source().id());
                 }
             } catch (Exception | AssertionError e) {
                 LOG.error("KHÔNG huỷ được lệnh {} - cần huỷ tay trong Sổ lệnh: {}", o.source().id(), e.getMessage());

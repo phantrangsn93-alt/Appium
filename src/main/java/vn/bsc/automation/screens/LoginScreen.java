@@ -6,6 +6,9 @@ import vn.bsc.automation.core.base.BaseScreen;
 import vn.bsc.automation.core.utils.Locators;
 
 import java.time.Duration;
+import org.openqa.selenium.WebElement;
+import vn.bsc.automation.core.config.Platform;
+import vn.bsc.automation.core.driver.DeviceActions;
 
 /**
  * Login screen. Two variants exist:
@@ -18,13 +21,13 @@ import java.time.Duration;
  */
 public class LoginScreen extends BaseScreen {
 
-    private final By usernameInput = vn.bsc.automation.core.utils.Locators.textField();
-    private final By passwordInput = vn.bsc.automation.core.utils.Locators.passwordField();
+    private final By usernameInput = Locators.textField();
+    private final By passwordInput = Locators.passwordField();
     private final By loginButton = Locators.classWithDesc("android.widget.Button", "Đăng nhập");
     private final By forgotPasswordLink = Locators.a11y("Quên mật khẩu?");
     private final By otherAccountLink = Locators.a11y("Đăng nhập tài khoản khác");
     /** Custody code such as 002C123456 shown in remembered mode. */
-    private final By rememberedAccount = vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[@clickable='false' and "
+    private final By rememberedAccount = Locators.xpath("//android.view.View[@clickable='false' and "
             + "string-length(@content-desc)=10 and substring(@content-desc,4,1)='C']");
 
     /** "Quên mật khẩu?" exists only on the login screen (the guest prompt dialog also has "Đăng nhập"). */
@@ -63,14 +66,14 @@ public class LoginScreen extends BaseScreen {
      * account autocomplete over the password field, and a tap there would pick the suggested account).
      */
     private void dismissKeyboard() {
-        if (!vn.bsc.automation.core.config.Platform.ios()) {
+        if (!Platform.ios()) {
             hideKeyboard();
             return;
         }
         // "Tiếp" in the ACCOUNT field moves the focus to the password field and closes the autocomplete
         // (verified: it does not submit); "Xong" or "Tiếp" in the password field would submit.
-        if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
-            vn.bsc.automation.core.driver.DeviceActions.tapKeyboardKey("Tiếp", "Next");
+        if (DeviceActions.isKeyboardShown()) {
+            DeviceActions.tapKeyboardKey("Tiếp", "Next");
         }
     }
 
@@ -82,7 +85,7 @@ public class LoginScreen extends BaseScreen {
 
     @Step("Bấm Đăng nhập")
     public void tapLogin() {
-        if (!vn.bsc.automation.core.config.Platform.ios()) {
+        if (!Platform.ios()) {
             hideKeyboard(); // iOS: the button stays above the keyboard; its keys would submit the form
         }
         tap(loginButton);
@@ -99,9 +102,9 @@ public class LoginScreen extends BaseScreen {
 
     @Step("Xoá hết thông tin ở username")
     public LoginScreen clearUsername() {
-        org.openqa.selenium.WebElement el = find(usernameInput);
-        vn.bsc.automation.core.driver.DeviceActions.tap(el);
-        vn.bsc.automation.core.driver.DeviceActions.clear(el);
+        WebElement el = find(usernameInput);
+        DeviceActions.tap(el);
+        DeviceActions.clear(el);
         return this;
     }
 
@@ -114,7 +117,7 @@ public class LoginScreen extends BaseScreen {
     /** Both fields typed by the user and keyboard closed. */
     public boolean isFormFilledByUser() {
         String user = getText(usernameInput);
-        return user != null && user.length() >= 6 && getPasswordLength() > 0 && !vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown();
+        return user != null && user.length() >= 6 && getPasswordLength() > 0 && !DeviceActions.isKeyboardShown();
     }
 
     public String getUsernameValue() {
@@ -122,8 +125,8 @@ public class LoginScreen extends BaseScreen {
     }
 
     public boolean isPasswordMasked() {
-        org.openqa.selenium.WebElement f = find(passwordInput);
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        WebElement f = find(passwordInput);
+        if (Platform.ios()) {
             // no "password" attribute on iOS: masked = secure field, or an obscured value ("•••") / empty hint field
             String v = f.getAttribute("value");
             return "XCUIElementTypeSecureTextField".equals(f.getAttribute("type")) || v == null || v.matches("[•●]*")

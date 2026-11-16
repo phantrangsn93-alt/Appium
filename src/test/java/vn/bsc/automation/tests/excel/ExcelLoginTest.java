@@ -13,6 +13,7 @@ import vn.bsc.automation.screens.components.AppHeader;
 import vn.bsc.automation.screens.components.BottomNavBar;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.time.Duration;
 
 /**
  * Scenarios from "Kịch bản kiểm thử sau khi update App.xlsx" - section "Đăng nhập/Đăng xuất/Đổi mật khẩu".
@@ -48,6 +49,6 @@ public class ExcelLoginTest extends BaseTest {
         assertThat(loginFlow.detectState()).as("Trạng thái đăng nhập").isEqualTo(AppState.LOGGED_IN);
         assertThat(new AppHeader().getAccountText()).as("Header hiển thị tài khoản (Tên - Mã TK)")
                 .matches("(?s).+ - [0-9]{3}C[0-9A-Z]+.*");
-        assertThat(new LoginScreen().isDisplayed(java.time.Duration.ofSeconds(1))).as("Không còn ở màn đăng nhập").isFalse();
+        assertThat(new LoginScreen().isDisplayed(Duration.ofSeconds(1))).as("Không còn ở màn đăng nhập").isFalse();
     }
 }

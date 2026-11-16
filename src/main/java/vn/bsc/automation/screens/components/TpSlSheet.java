@@ -10,6 +10,8 @@ import vn.bsc.automation.core.utils.UiNode;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Comparator;
+import org.openqa.selenium.Dimension;
 
 /**
  * Bottom sheet "TP/SL" (take profit / stop loss), opened by tapping a holding row in Giao dịch > Danh mục.
@@ -40,10 +42,6 @@ public class TpSlSheet extends BaseScreen {
         return valueRightOf("Mã CK");
     }
 
-    public BigDecimal costPrice() {
-        return NumberUtils.parse(valueRightOf("Giá vốn"));
-    }
-
     /** Max quantity from the hint "≤ 852,800". */
     public long maxQuantity() {
         return NumberUtils.parseLong(hintRightOf("Khối lượng").replaceAll("[^0-9,]", ""));
@@ -62,7 +60,7 @@ public class TpSlSheet extends BaseScreen {
     @Step("Đóng TP/SL")
     public void close() {
         // the Scrim covers the area above the sheet; tap near the top of the screen
-        org.openqa.selenium.Dimension s = driver().manage().window().getSize();
+        Dimension s = driver().manage().window().getSize();
         GestureUtils.tap(s.getWidth() / 2, s.getHeight() / 5);
     }
 
@@ -95,7 +93,7 @@ public class TpSlSheet extends BaseScreen {
      */
     private void enterOnRow(String label, String value) {
         UiNode field = field(label);
-        GestureUtils.tap(field.x() + field.width() / 2, field.y() + field.height() / 2);
+        GestureUtils.tap(field);
         NumericKeypad keypad = new NumericKeypad().waitUntilLoaded();
         keypad.clear();
         keypad.enter(value);
@@ -108,18 +106,15 @@ public class TpSlSheet extends BaseScreen {
         UiNode l = label(nodes, label);
         return nodes.stream()
                 .filter(n -> n.clickable() && sameRow(n, l) && n.x() > l.x() + l.width() / 2
-                        && text(n).matches("[0-9][0-9.,]*"))
-                .min(java.util.Comparator.comparingInt(UiNode::x))
+                        && n.label().matches("[0-9][0-9.,]*"))
+                .min(Comparator.comparingInt(UiNode::x))
                 .orElseThrow(() -> new AssertionError("TP/SL: không thấy ô nhập của " + label));
     }
 
-    private static String text(UiNode n) {
-        return n.desc().isBlank() ? (n.text() == null ? "" : n.text().trim()) : n.desc().trim();
-    }
 
     /** Current value typed in a row ("Khối lượng" / "Chốt lời" / "Cắt lỗ"). */
     public BigDecimal value(String label) {
-        return NumberUtils.parse(text(field(label)));
+        return NumberUtils.parse(field(label).label());
     }
 
     /**
@@ -155,7 +150,7 @@ public class TpSlSheet extends BaseScreen {
         UiNode l = label(nodes, text);
         return nodes.stream()
                 .filter(n -> !n.desc().isBlank() && n.x() > l.x() + l.width() / 2 && sameRow(n, l))
-                .min(java.util.Comparator.comparingInt(UiNode::x))
+                .min(Comparator.comparingInt(UiNode::x))
                 .map(UiNode::desc).orElseThrow(() -> new AssertionError("No value for " + text));
     }
 
@@ -165,7 +160,7 @@ public class TpSlSheet extends BaseScreen {
         UiNode l = label(nodes, text);
         return nodes.stream()
                 .filter(n -> !n.desc().isBlank() && n.x() > l.x() + l.width() / 2 && sameRow(n, l))
-                .max(java.util.Comparator.comparingInt(UiNode::x))
+                .max(Comparator.comparingInt(UiNode::x))
                 .map(UiNode::desc).orElseThrow(() -> new AssertionError("No hint for " + text));
     }
 

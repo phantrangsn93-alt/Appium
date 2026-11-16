@@ -22,13 +22,23 @@ import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.OptionalInt;
+import java.util.function.Supplier;
+import org.openqa.selenium.Rectangle;
+import org.openqa.selenium.WebElement;
+import vn.bsc.automation.core.config.ConfigReader;
+import vn.bsc.automation.core.config.Platform;
+import vn.bsc.automation.core.driver.DeviceActions;
+import vn.bsc.automation.core.utils.AllureUtils;
 
 /**
  * "Đặt lệnh" form.
  * <p>
- * SAFETY: this is a production trading app. This screen object intentionally exposes NO method that
- * submits a real order. The only way to tap MUA/BÁN is {@link #tapSubmitExpectingValidation()}, which
- * refuses to run unless quantity == 0 (a value the app always rejects client-side).
+ * SAFETY: this is a production trading app. The ONLY method that taps MUA/BÁN is
+ * {@link #submitRealOrder(boolean)} (a REAL order); it is called solely by {@code OrderFlow.place}, after the
+ * order.submit.enabled guard and {@code OrderFlow.verifyFormBeforeSubmit} (side, sub-account, symbol, quantity,
+ * price checked against the test data).
  */
 public class OrderFormScreen extends BaseScreen {
 
@@ -57,7 +67,6 @@ public class OrderFormScreen extends BaseScreen {
     private final By buyButton = Locators.descStartsWith("MUA");
     // Rendered by the app in NFD form ("A" + U+0301); Locators.a11y matches NFC and NFD.
     private final By sellButton = Locators.descStartsWith("BÁN");
-    private final By infoContainer = Locators.descContains("Sức mua:");
     private final By limitType = Locators.a11y(OrderType.LIMIT.label());
     private final By validityRadios = Locators.byClass("android.widget.RadioButton");
 
@@ -84,7 +93,7 @@ public class OrderFormScreen extends BaseScreen {
         // small scrolls (15% of the window): a big scroll pushes the top rows (OCO: Giá đặt LO) out of view
         for (int attempt = 0; attempt < 6; attempt++) {
             List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
-            java.util.OptionalInt pct = nodes.stream().filter(n -> "25%".equals(n.desc())).mapToInt(UiNode::y).findFirst();
+            OptionalInt pct = nodes.stream().filter(n -> "25%".equals(n.desc())).mapToInt(UiNode::y).findFirst();
             if (pct.isEmpty()) {
                 GestureUtils.scrollBy(0.15);
                 continue;
@@ -120,7 +129,7 @@ public class OrderFormScreen extends BaseScreen {
         }
         // iOS: the "-" / "+" icons are not accessibility elements. A stepper value is the WIDE numeric field
         // (≈ half the screen; the price chips 7.29 / 6.82 / 6.35 are narrow): synthesize the icons right beside it.
-        if (vn.bsc.automation.core.config.Platform.ios() && value.width() > 120) {
+        if (Platform.ios() && value.width() > 120) {
             int w = Math.max(24, value.height());
             UiNode m = new UiNode(value.className(), "", "", true, value.x() - w - 2, value.y(), w, value.height());
             UiNode p = new UiNode(value.className(), "", "", true, value.x() + value.width() + 2, value.y(), w, value.height());
@@ -130,7 +139,7 @@ public class OrderFormScreen extends BaseScreen {
     }
 
     /** Evaluates a form check, treating a transient overlay (AssertionError: row not found) as "not yet". */
-    private static boolean safe(java.util.function.Supplier<Boolean> check) {
+    private static boolean safe(Supplier<Boolean> check) {
         try {
             return check.get();
         } catch (AssertionError e) {
@@ -139,7 +148,7 @@ public class OrderFormScreen extends BaseScreen {
     }
 
     private static void tapNode(UiNode n) {
-        GestureUtils.tap(n.x() + n.width() / 2, n.y() + n.height() / 2);
+        GestureUtils.tap(n);
     }
 
     @Override
@@ -152,15 +161,36 @@ public class OrderFormScreen extends BaseScreen {
     @Step("Chọn Lệnh mua")
     public OrderFormScreen selectBuy() {
         tap(buyTab);
-        WaitUtils.isVisible(buyButton, Duration.ofSeconds(5));
+        if (!WaitUtils.isVisible(buyButton, Duration.ofSeconds(5)) && submitSideOnScreen().orElse(null) != Side.BUY) {
+            throw new AssertionError("Đã bấm Lệnh mua nhưng form không chuyển sang MUA");
+        }
         return this;
     }
 
     @Step("Chọn Lệnh bán")
     public OrderFormScreen selectSell() {
         tap(sellTab);
-        WaitUtils.isVisible(sellButton, Duration.ofSeconds(5));
+        if (!WaitUtils.isVisible(sellButton, Duration.ofSeconds(5)) && submitSideOnScreen().orElse(null) != Side.SELL) {
+            throw new AssertionError("Đã bấm Lệnh bán nhưng form không chuyển sang BÁN");
+        }
         return this;
+    }
+
+    /**
+     * Side of the submit button visible on screen ("MUA : 682,000" / "BÁN : ..."), read from ONE page source without
+     * scrolling; empty when the button is off screen.
+     */
+    public Optional<Side> submitSideOnScreen() {
+        for (UiNode n : UiNode.snapshot(driver().getPageSource())) {
+            String d = Locators.nfc(n.desc());
+            if (d.matches("(?s)MUA(\\s.*|:.*)?")) {
+                return Optional.of(Side.BUY);
+            }
+            if (d.matches("(?s)BÁN(\\s.*|:.*)?")) {
+                return Optional.of(Side.SELL);
+            }
+        }
+        return Optional.empty();
     }
 
     public Side currentSide() {
@@ -189,7 +219,7 @@ public class OrderFormScreen extends BaseScreen {
     // ------------------------------------------------------------------ symbol
 
     private static By suggestion(String symbol) {
-        return vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,' | ')]");
+        return Locators.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,' | ')]");
     }
 
     /**
@@ -200,7 +230,7 @@ public class OrderFormScreen extends BaseScreen {
         List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
         int tabsBottom = nodes.stream().filter(n -> "Lệnh mua".equals(n.desc()))
                 .mapToInt(n -> n.y() + n.height()).findFirst().orElseThrow(() -> new AssertionError("Mua/Bán tabs not visible"));
-        java.util.Optional<UiNode> card = nodes.stream()
+        Optional<UiNode> card = nodes.stream()
                 .filter(n -> n.clickable() && n.y() >= tabsBottom && n.desc().contains("\n")
                         && n.desc().split("\n")[0].trim().matches("[A-Z0-9]{3,12}"))
                 .min(Comparator.comparingInt(UiNode::y));
@@ -232,14 +262,6 @@ public class OrderFormScreen extends BaseScreen {
         return this;
     }
 
-    public boolean isSuggestionVisible(String symbol) {
-        return isVisible(suggestion(symbol), Duration.ofSeconds(10));
-    }
-
-    public String getSuggestionText(String symbol) {
-        return getDesc(suggestion(symbol));
-    }
-
     @Step("Chọn mã gợi ý: {symbol}")
     public OrderFormScreen chooseSuggestion(String symbol) {
         tap(suggestion(symbol));
@@ -259,7 +281,7 @@ public class OrderFormScreen extends BaseScreen {
         By modify = Locators.descRegex("(?:" + Locators.anyForm("SỬA ") + "|" + Locators.anyForm("Sửa ") + ")"
                 + "(?:MUA|BÁN|mua|bán|" + Locators.anyForm("BÁN") + "|" + Locators.anyForm("bán") + ").*");
         if (isVisible(modify, Duration.ofSeconds(1))) {
-            org.openqa.selenium.Rectangle r = find(modify).getRect();
+            Rectangle r = find(modify).getRect();
             List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
             nodes.stream().filter(n -> "Huỷ".equals(n.desc()) || "Hủy".equals(n.desc()))
                     .filter(n -> n.y() >= r.getY() + r.getHeight() - 5)
@@ -294,7 +316,7 @@ public class OrderFormScreen extends BaseScreen {
      */
     public List<BigDecimal> getCeilingRefFloor() {
         scrollToTop();
-        List<List<BigDecimal>> holder = new java.util.ArrayList<>();
+        List<List<BigDecimal>> holder = new ArrayList<>();
         boolean loaded = WaitUtils.condition(() -> safe(() -> {
             List<BigDecimal> v = readCeilingRefFloor();
             holder.clear();
@@ -339,17 +361,13 @@ public class OrderFormScreen extends BaseScreen {
                     return trimmed.get(i + 1);
                 }
             }
-            WaitUtils.condition(() -> false, Duration.ofMillis(500));
+            WaitUtils.pause(Duration.ofMillis(500));
         }
         throw new AssertionError("Label '" + label + "' not found in order info");
     }
 
     public long getBuyingPower() {
         return NumberUtils.parseLong(infoValue("Sức mua:"));
-    }
-
-    public String getMatchedVolumeText() {
-        return infoValue("KL khớp lệnh:");
     }
 
     /**
@@ -368,7 +386,7 @@ public class OrderFormScreen extends BaseScreen {
         return nodes.stream()
                 .filter(n -> n.y() >= crfBottom && n.y() < limitTop && n.x() < halfWidth)
                 .filter(n -> n.desc().matches("^[0-9][0-9,]*$"))
-                .min(java.util.Comparator.comparingInt(UiNode::y))
+                .min(Comparator.comparingInt(UiNode::y))
                 .map(n -> NumberUtils.parseLong(n.desc()))
                 .orElseThrow(() -> new AssertionError("'KL Tối đa' value not found"));
     }
@@ -384,10 +402,6 @@ public class OrderFormScreen extends BaseScreen {
     public OrderFormScreen selectOrderType(OrderType type) {
         tap(Locators.a11y(type.label()));
         return this;
-    }
-
-    public boolean isOrderTypeVisible(OrderType type) {
-        return isVisible(Locators.a11y(type.label()));
     }
 
     /**
@@ -472,7 +486,7 @@ public class OrderFormScreen extends BaseScreen {
 
     private ConditionalType currentConditionalType() {
         String label = getConditionalType();
-        return java.util.Arrays.stream(ConditionalType.values()).filter(t -> t.label().equals(label)).findFirst()
+        return Arrays.stream(ConditionalType.values()).filter(t -> t.label().equals(label)).findFirst()
                 .orElseThrow(() -> new AssertionError("Not a conditional order: " + label));
     }
 
@@ -518,26 +532,9 @@ public class OrderFormScreen extends BaseScreen {
 
     private static final Pattern DATE = Pattern.compile("^\\d{2}/\\d{2}/\\d{4}$");
 
-    /**
-     * "Đến ngày" of a multi-day / conditional order (dd/MM/yyyy). Tapping it opens a date picker
-     * (3 SeekBars day/month/year + "Huỷ bỏ" / "Đồng ý"). WARNING (06/11/2026): changing the sub-account while the
-     * picker is open leaves it stuck on screen (neither button works) - only an app restart clears it.
-     */
-    public String getExpiryDate() {
-        return UiNode.snapshot(driver().getPageSource()).stream()
-                .filter(n -> n.clickable() && DATE.matcher(n.desc()).matches())
-                .map(UiNode::desc).findFirst()
-                .orElseThrow(() -> new AssertionError("'Đến ngày' not shown (validity is not multi-day?)"));
-    }
-
-    /** index 0 = "Trong ngày", 1 = "Nhiều ngày" (RadioButtons without content-desc) */
-    public boolean isValidityChecked(int index) {
-        return Boolean.parseBoolean(validityRadio(index).getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr()));
-    }
-
     @Step("Chọn hiệu lực index {index}")
     public OrderFormScreen selectValidity(int index) {
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        if (Platform.ios()) {
             // iOS: no radio element type to rely on (the "Button" role matched another control and reopened the
             // keypad). Tap the radio circle drawn right of its label "Trong ngày" / "Nhiều ngày".
             // Survey 14/11/2026: the labels are NOT exposed; only the two radio circles are (small Buttons on the row
@@ -562,25 +559,33 @@ public class OrderFormScreen extends BaseScreen {
             }
             UiNode r = radios.get(index);
             if (!"1".equals(r.text() == null ? "" : r.text().trim())) {
-                GestureUtils.tap(r.x() + r.width() / 2, r.y() + r.height() / 2);
-                WaitUtils.condition(() -> false, Duration.ofMillis(600));
+                GestureUtils.tap(r);
+                int rx = r.x();
+                boolean selected = WaitUtils.condition(() -> UiNode.snapshot(driver().getPageSource()).stream()
+                        .anyMatch(n -> Math.abs(n.x() - rx) < 5 && n.y() > y0 + 15 && n.y() < y0 + 90
+                                && "1".equals(n.text() == null ? "" : n.text().trim())), Duration.ofSeconds(3));
+                if (!selected) {
+                    throw new AssertionError("Không chọn được hiệu lực " + (index == 0 ? "Trong ngày" : "Nhiều ngày"));
+                }
             }
             return this;
         }
-        org.openqa.selenium.WebElement radio = validityRadio(index);
-        if (!Boolean.parseBoolean(radio.getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr()))) {
-            vn.bsc.automation.core.driver.DeviceActions.tap(radio);
-            WaitUtils.condition(() -> Boolean.parseBoolean(validityRadio(index).getAttribute(vn.bsc.automation.core.config.Platform.checkedAttr())), Duration.ofSeconds(3));
+        WebElement radio = validityRadio(index);
+        if (!Boolean.parseBoolean(radio.getAttribute(Platform.checkedAttr()))) {
+            DeviceActions.tap(radio);
+            if (!WaitUtils.condition(() -> Boolean.parseBoolean(validityRadio(index).getAttribute(Platform.checkedAttr())), Duration.ofSeconds(3))) {
+                throw new AssertionError("Không chọn được hiệu lực index " + index);
+            }
         }
         return this;
     }
 
     /** The radios sit below the fold on conditional forms -> scroll them into view first. */
-    private org.openqa.selenium.WebElement validityRadio(int index) {
+    private WebElement validityRadio(int index) {
         for (int i = 0; i < 4 && findAll(validityRadios).size() <= index; i++) {
             GestureUtils.scrollBy(0.2);
         }
-        List<org.openqa.selenium.WebElement> radios = findAll(validityRadios);
+        List<WebElement> radios = findAll(validityRadios);
         if (radios.size() <= index) {
             throw new AssertionError("Hiệu lực radio #" + index + " not found");
         }
@@ -670,7 +675,7 @@ public class OrderFormScreen extends BaseScreen {
         AlertDialog d = new AlertDialog();
         if (d.isShown(Duration.ofSeconds(1))) {
             String msg = d.getMessage();
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Lỗi hệ thống khi " + step);
+            AllureUtils.attachScreenshot("Lỗi hệ thống khi " + step);
             if (d.hasButton(AlertDialog.BTN_CLOSE)) {
                 d.close();
             }
@@ -766,10 +771,6 @@ public class OrderFormScreen extends BaseScreen {
         GestureUtils.tap(x, y);
     }
 
-    public String getMarketPriceType() {
-        return getDesc(Locators.descMatchesAny("ATO", "ATC", "MTL", "MOK", "MAK", "PLO"));
-    }
-
     @Step("Đưa khối lượng về 0")
     public OrderFormScreen resetQuantity() {
         for (int i = 0; i < 200 && getQuantity() > 0; i++) {
@@ -778,44 +779,7 @@ public class OrderFormScreen extends BaseScreen {
         return this;
     }
 
-    @Step("Chọn {percent}% sức mua/KL tối đa")
-    public OrderFormScreen tapPercent(int percent) {
-        tap(Locators.a11y(percent + "%"));
-        return this;
-    }
-
-    public boolean isPercentButtonVisible(int percent) {
-        return isVisible(Locators.a11y(percent + "%"));
-    }
-
     // ------------------------------------------------------------------ submit (validation only)
-
-    /**
-     * Taps MUA/BÁN ONLY when quantity is 0, to verify client-side validation.
-     * Throws if quantity &gt; 0 so a real order can never be sent by automation.
-     */
-    @Step("Bấm MUA/BÁN với khối lượng = 0 (kiểm tra validate)")
-    public AlertDialog tapSubmitExpectingValidation() {
-        long qty = getQuantity();
-        if (qty != 0) { // ALWAYS - independent of order.submit.enabled (real orders only via submitRealOrder)
-            throw new IllegalStateException("SAFETY GUARD: refusing to tap submit with quantity=" + qty
-                    + ". Validation checks must never place real orders.");
-        }
-        By submit = currentSide() == Side.BUY ? buyButton : sellButton;
-        scrollTo(submit);
-        tap(submit);
-        return new AlertDialog().waitUntilLoaded();
-    }
-
-    /**
-     * REAL ORDER: taps MUA/BÁN with the current form. Allowed only when {@code order.submit.enabled=true}
-     * (explicit opt-in per run). Returns the confirmation dialog (PIN) - or null when the app rejects the
-     * order immediately (error dialog, e.g. wrong session / insufficient buying power).
-     */
-    @Step("Chạm vào nút MUA/BÁN (lệnh thật)")
-    public OrderConfirmDialog submitRealOrder() {
-        return submitRealOrder(isConditional());
-    }
 
     /** @param conditional the order is a conditional one (known from the test data): longer wait for the sheet */
     public OrderConfirmDialog submitRealOrder(boolean conditional) {
@@ -826,8 +790,8 @@ public class OrderFormScreen extends BaseScreen {
         scrollTo(submit);
         tap(submit);
         if (conditional) {
-            WaitUtils.condition(() -> false, Duration.ofMillis(800));
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Ngay sau khi bấm MUA/BÁN (lệnh điều kiện)");
+            WaitUtils.pause(Duration.ofMillis(800));
+            AllureUtils.attachScreenshot("Ngay sau khi bấm MUA/BÁN (lệnh điều kiện)");
         }
         OrderConfirmDialog confirm = new OrderConfirmDialog();
         AlertDialog error = new AlertDialog();
@@ -855,7 +819,7 @@ public class OrderFormScreen extends BaseScreen {
                 shown = "";
             }
         }
-        if (shown != null && java.text.Normalizer.normalize(shown, java.text.Normalizer.Form.NFC).contains("Chọn kênh nhận mã")) {
+        if (shown != null && Locators.nfc(shown).contains("Chọn kênh nhận mã")) {
             // Not an error: the OTP channel picker (first order of the session). Leave it open - the confirm
             // dialog waits for the tester to pick a channel and type the OTP.
             log.info("Màn xác nhận yêu cầu OTP (Chọn kênh nhận mã) - chờ người dùng nhập OTP");
@@ -863,8 +827,8 @@ public class OrderFormScreen extends BaseScreen {
             return confirm; // the sheet is open behind the picker (its title is hidden while the picker shows)
         } else if (shown != null && !shown.isBlank()) {
             String msg = shown;
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Lỗi khi mở xác nhận lệnh: " + msg);
-            vn.bsc.automation.core.utils.AllureUtils.attachText("Lỗi hiển thị trên màn xác nhận lệnh", msg);
+            AllureUtils.attachScreenshot("Lỗi khi mở xác nhận lệnh: " + msg);
+            AllureUtils.attachText("Lỗi hiển thị trên màn xác nhận lệnh", msg);
             log.warn("Error dialog over the order confirmation: {}", msg);
             lastPreConfirmError = msg;
             if (error.hasButton(AlertDialog.BTN_CLOSE)) {
@@ -880,20 +844,12 @@ public class OrderFormScreen extends BaseScreen {
 
     /** order.conditional.confirm.wait (seconds) - wait for the confirmation sheet of a conditional order. */
     private static long ConfigReader_conditionalWait() {
-        return vn.bsc.automation.core.config.ConfigReader.getInt("order.conditional.confirm.wait", 60);
+        return ConfigReader.getInt("order.conditional.confirm.wait", 60);
     }
 
-    /** True when the form is on the "Điều kiện" order type (Stop Limit / Trailing Stop / OCO). */
-    private boolean isConditional() {
-        return isVisible(Locators.descMatchesAny("Giá kích hoạt", "Biên độ"), Duration.ofSeconds(1));
-    }
-
-    /** Error that popped up over the confirmation sheet during the last {@link #submitRealOrder()} (null = none). */
+    /** Error that popped up over the confirmation sheet during the last {@link #submitRealOrder(boolean)} (null = none). */
     public String lastPreConfirmError() {
         return lastPreConfirmError;
     }
 
-    public boolean isSubmitButtonVisible() {
-        return isVisible(buyButton, Duration.ofSeconds(2)) || isVisible(sellButton, Duration.ofSeconds(2));
-    }
 }

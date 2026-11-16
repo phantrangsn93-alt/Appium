@@ -29,7 +29,7 @@ import vn.bsc.automation.flows.Navigator;
  * Screen recording is per test method (attached to the report only on failure - see TestListener).
  * <p>
  * Parallel run: devices in config {@code devices=udid1:8200,udid2:8201} + {@code parallel="classes"}
- * (testng-parallel.xml): each thread borrows a device from {@link DevicePool} and keeps it (and its shared
+ * (suite with parallel="classes"): each thread borrows a device from {@link DevicePool} and keeps it (and its shared
  * session) until the end of the suite. A {@code udid} parameter in testng.xml pins a test to a device.
  */
 public abstract class BaseTest {

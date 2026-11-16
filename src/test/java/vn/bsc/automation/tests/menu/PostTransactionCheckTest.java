@@ -17,7 +17,7 @@ import vn.bsc.automation.data.TransactionLog;
 import vn.bsc.automation.screens.MenuItem;
 import vn.bsc.automation.screens.MenuTargetScreen;
 import vn.bsc.automation.screens.OrderBookScreen;
-import vn.bsc.automation.screens.OrderBookScreen.OrderSpec;
+import vn.bsc.automation.data.OrderSpec;
 import vn.bsc.automation.screens.components.AppHeader;
 
 import java.text.NumberFormat;
@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import vn.bsc.automation.data.OrderCase;
 
 /**
  * Last step of the TRANSACTION suite: after the orders and the menu transactions of this run, the order book
@@ -69,7 +70,7 @@ public class PostTransactionCheckTest extends LoggedInBaseTest {
         SoftAssertions soft = new SoftAssertions();
         for (PlacedOrder o : normal) {
             String qty = NumberFormat.getIntegerInstance(Locale.US).format(o.source().quantity());
-            String side = o.source().side() == vn.bsc.automation.data.OrderCase.Side.BUY ? "Mua" : "Bán";
+            String side = o.source().side() == OrderCase.Side.BUY ? "Mua" : "Bán";
             soft.assertThat(rows).as("[%s] Lịch sử có lệnh %s %s KL %s", o.source().id(), side, o.source().symbol(), qty)
                     .anySatisfy(r -> assertThat(r).startsWith(o.source().symbol()).containsIgnoringCase(side).contains(qty));
         }

@@ -7,6 +7,9 @@ import vn.bsc.automation.core.config.ConfigReader;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import vn.bsc.automation.core.config.AppConfig;
 
 /**
  * Pool of devices for parallel execution. Configure {@code devices=udid1:8200,udid2:8201}
@@ -23,11 +26,11 @@ public final class DevicePool {
     private static final Logger LOG = LoggerFactory.getLogger(DevicePool.class);
     private static final BlockingQueue<Device> FREE = new LinkedBlockingQueue<>();
     private static final ThreadLocal<Device> CURRENT = new ThreadLocal<>();
-    private static final java.util.Set<Device> BORROWED = java.util.concurrent.ConcurrentHashMap.newKeySet();
+    private static final Set<Device> BORROWED = ConcurrentHashMap.newKeySet();
 
     static {
         // iOS: ios.devices=udid:wdaLocalPort,... (WebDriverAgent ports must be unique, e.g. 8100, 8101)
-        boolean ios = vn.bsc.automation.core.config.AppConfig.isIOS();
+        boolean ios = AppConfig.isIOS();
         String cfg = ConfigReader.get(ios ? "ios.devices" : "devices", "");
         if (cfg.isBlank()) {
             String udid = ios ? ConfigReader.get("ios.udid", "") : ConfigReader.get("device.udid", "");

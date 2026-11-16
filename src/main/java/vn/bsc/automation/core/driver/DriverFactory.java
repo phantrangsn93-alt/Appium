@@ -10,6 +10,9 @@ import org.slf4j.LoggerFactory;
 import vn.bsc.automation.core.config.AppConfig;
 
 import java.net.URL;
+import java.util.Arrays;
+import java.util.concurrent.TimeUnit;
+import org.openqa.selenium.SessionNotCreatedException;
 
 /** Creates Appium sessions and registers them in {@link DriverManager}. */
 public final class DriverFactory {
@@ -46,7 +49,7 @@ public final class DriverFactory {
         AndroidDriver driver;
         try {
             driver = new AndroidDriver(server, options);
-        } catch (org.openqa.selenium.SessionNotCreatedException e) {
+        } catch (SessionNotCreatedException e) {
             // A previous run killed mid-way can leave the UiAutomator2 port forwarded ("local port #8200 is busy")
             if (e.getMessage() == null || !e.getMessage().contains("is busy")) {
                 throw e;
@@ -70,10 +73,10 @@ public final class DriverFactory {
                 {adb, "-s", udid, "shell", "am", "force-stop", "io.appium.uiautomator2.server.test"}};
         for (String[] c : cmds) {
             if (udid == null) {
-                c = java.util.Arrays.stream(c).filter(s -> s != null && !"-s".equals(s)).toArray(String[]::new);
+                c = Arrays.stream(c).filter(s -> s != null && !"-s".equals(s)).toArray(String[]::new);
             }
             try {
-                new ProcessBuilder(c).redirectErrorStream(true).start().waitFor(10, java.util.concurrent.TimeUnit.SECONDS);
+                new ProcessBuilder(c).redirectErrorStream(true).start().waitFor(10, TimeUnit.SECONDS);
             } catch (Exception ex) {
                 LOG.warn("Could not run {}: {}", String.join(" ", c), ex.getMessage());
             }

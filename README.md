@@ -51,12 +51,14 @@ adb devices            # thiết bị phải ở trạng thái "device"
 ## 3. Chạy test
 
 ```bash
-mvn test                                        # Smoke (testng-smoke.xml)
-mvn test -Dsuite=testng-regression.xml          # Regression đầy đủ
-mvn test -Dsuite=testng-postlogin.xml           # Chỉ các màn sau đăng nhập (không đăng xuất)
-mvn test -Ddevice.udid=XXXX -Denv=uat           # Ghi đè cấu hình
+mvn test                                        # Thị trường – Bảng giá (suites/testng-market.xml, chỉ đọc)
+mvn test -Dsuite=testng-transaction.xml         # Giao dịch: đăng nhập → lệnh → sửa/huỷ → lệnh ĐK/TP-SL → Menu → kiểm tra sau GD
+mvn test -Dsuite=testng-orders.xml              # Chỉ đặt / sửa / huỷ lệnh (-Dorders.include=EX02_LO -Dactions.include=none)
+mvn test -Dsuite=testng-menu-tx.xml             # Chỉ giao dịch tiền / chứng khoán trong Menu
+mvn test -Dsuite=testng-cleanup.xml             # Công cụ huỷ các lệnh do test tạo còn treo
 mvn test -Dsuite=testng-unit.xml                # Unit test framework (không cần thiết bị)
-mvn test -Dsuite=testng-menu.xml                # Menu phải: mở mọi mục + form giao dịch tiền (chỉ đọc)
+mvn test -Denv=prod -Dplatform.name=iOS ...     # Ghi đè cấu hình / chạy trên iPhone (xem mục iOS)
+./run-both.sh testng-market.xml                 # Android + iOS song song
 mvn allure:serve                                # Xem báo cáo Allure
 ```
 
@@ -65,6 +67,15 @@ mvn allure:serve                                # Xem báo cáo Allure
   nếu chưa thì đăng nhập bằng tài khoản trong `.env`.
 
 ## 4. Cấu trúc
+
+```
+suites/                 TestNG suites (-Dsuite=<tên file>)
+docs/                   locator khảo sát; docs/testcases/ = file kịch bản Excel (nguồn + bộ tự động)
+src/main/resources/config   config.properties + config-<env>.properties, sessions.properties
+src/test/resources/testdata dữ liệu test (CSV / JSON)
+tools/report            sinh báo cáo ISTQB (.docx / .html) từ kết quả TestNG/Allure
+tools/testcases         sinh "docs/testcases/Kịch bản kiểm thử tự động - BSC.xlsx"
+```
 
 ```
 src/main/java/vn/bsc/automation
@@ -124,18 +135,12 @@ src/test/resources/testdata   login.json, order.json, search.json
 * Giá trị tiểu khoản chứa **zero-width space (U+200B)** giữa từng ký tự → `Locators.nfc()` đã tự loại bỏ;
   ô "nhãn + giá trị" dùng `Locators.field("Tiểu khoản chuyển")`.
 
-## 7. Chạy song song nhiều thiết bị
+## 7. Chạy song song Android + iOS
 
-Mỗi `<test>` trong testng.xml khai báo `udid` và `systemPort` riêng, đặt `parallel="tests"` cho `<suite>`:
+`./run-both.sh [suite.xml]` chạy cùng một suite trên Android và iPhone (mỗi nền tảng 1 tiến trình Maven,
+kết quả riêng trong `target/<platform>-*`).
 
-```xml
-<suite name="Parallel" parallel="tests" thread-count="2">
-  <test name="Device A"><parameter name="udid" value="AAA"/><parameter name="systemPort" value="8200"/>...</test>
-  <test name="Device B"><parameter name="udid" value="BBB"/><parameter name="systemPort" value="8201"/>...</test>
-</suite>
-```
-
-## 8. Kịch bản Excel "Kịch bản kiểm thử sau khi update App.xlsx"
+## 8. Kịch bản Excel "docs/testcases/Kịch bản kiểm thử sau khi update App.xlsx"
 
 | Excel | Test | Dữ liệu |
 |---|---|---|
@@ -144,7 +149,6 @@ Mỗi `<test>` trong testng.xml khai báo `udid` và `systemPort` riêng, đặt
 | LO-GTC (Nhiều ngày) | `ExcelOrderTest.placeOrder` – cột `validity=GTC` | `orders.csv` EX09 |
 | Stop limit / Trailing Stop / OCO – trong ngày & nhiều ngày | `ExcelOrderTest.placeOrder` – `orderType`, `triggerPrice` (`HINT+0.5` = giá gợi ý + 0.5), `amplitude`, `priceStep` | `orders.csv` EX10–EX15 |
 | Sửa lệnh (KL = 200) / Hủy 1 lệnh / Hủy nhiều lệnh | `ExcelOrderTest.orderAction` (data-driven) – cột `newQuantity` | `testdata/order_actions.csv` |
-| Kiểm tra dữ liệu trước khi chạy thật | `OrderDryRunTest` – điền form từng dòng, **không gửi lệnh** | `testdata/orders.csv` |
 
 **Thêm loại lệnh / sàn / mã = thêm 1 dòng CSV, không sửa code.** Mở CSV bằng Excel, lưu "CSV UTF-8".
 
@@ -159,8 +163,8 @@ Loại lệnh thị trường theo sàn (khảo sát trên app): **HOSE** ATO, A
 Khung giờ phiên cấu hình tại `src/main/resources/config/sessions.properties` (kèm ngày nghỉ lễ).
 
 ```bash
-mvn test -Dsuite=testng-excel.xml                            # No.1 (+ No.2-8 bị SKIP vì chưa mở khoá)
-mvn test -Dsuite=testng-excel.xml -Dorder.submit.enabled=true  # chạy lệnh THẬT: người kiểm thử gõ PIN khi test dừng chờ
+mvn test -Dsuite=testng-orders.xml                            # bị SKIP khi chưa mở khoá
+mvn test -Dsuite=testng-orders.xml -Dorder.submit.enabled=true  # chạy lệnh THẬT: người kiểm thử nhập PIN/OTP khi test dừng chờ
 ```
 
 An toàn khi đặt lệnh thật:
@@ -175,13 +179,9 @@ An toàn khi đặt lệnh thật:
 
 * **Một Appium session cho mỗi class**, giữ trạng thái đăng nhập (`noReset`), không cài lại app.
 * Explicit wait + polling 300 ms, không `sleep`; đọc nhiều giá trị bằng 1 snapshot page source.
-* **Chạy song song nhiều thiết bị** – `testng-parallel.xml` + `DevicePool`:
-  ```bash
-  mvn test -Dsuite=testng-parallel.xml -Ddevices=dabfffa4:8200,emulator-5554:8201
-  ```
-  Mỗi class mượn 1 thiết bị rảnh → N thiết bị ≈ N lần nhanh hơn. Một thiết bị chỉ chạy 1 app nên
-  không thể song song trên cùng máy. `LoginTest` (đăng xuất) và `ExcelOrderTest` (1 sổ lệnh) chạy tuần tự riêng.
-  Nếu dùng chung 1 tài khoản trên nhiều máy, cần xác nhận hệ thống cho đăng nhập đồng thời.
+* **Chạy song song nhiều thiết bị** – `DevicePool` + `-Ddevices=dabfffa4:8200,emulator-5554:8201` (thêm
+  `parallel="classes"` vào suite): mỗi class mượn 1 thiết bị rảnh. `LoginTest` (đăng xuất) và `ExcelOrderTest`
+  (1 sổ lệnh) nên chạy tuần tự. Android + iOS song song: `./run-both.sh`.
 * Tắt quay video khi không cần: `-Dvideo.on.failure=false`.
 
 ## 10. Phát hiện trên app khi chạy thực tế (cần BA/Dev xem xét)

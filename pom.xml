@@ -27,8 +27,8 @@
         <surefire.version>3.5.3</surefire.version>
         <allure-maven.version>2.15.2</allure-maven.version>
 
-        <!-- Default suite; override: mvn test -Dsuite=testng-regression.xml -->
-        <suite>testng-smoke.xml</suite>
+        <!-- Default suite (file in suites/); override: mvn test -Dsuite=testng-transaction.xml -->
+        <suite>testng-market.xml</suite>
     </properties>
 
     <dependencies>
@@ -77,7 +77,7 @@
                 <version>${surefire.version}</version>
                 <configuration>
                     <suiteXmlFiles>
-                        <suiteXmlFile>${suite}</suiteXmlFile>
+                        <suiteXmlFile>suites/${suite}</suiteXmlFile>
                     </suiteXmlFiles>
                     <argLine>
                         -Dfile.encoding=UTF-8

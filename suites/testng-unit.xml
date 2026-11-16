@@ -12,6 +12,7 @@
     <test name="iOS platform (no device)">
         <classes>
             <class name="vn.bsc.automation.unit.IosPlatformTest"/>
+            <class name="vn.bsc.automation.unit.OrderResultMessageTest"/>
         </classes>
     </test>
 </suite>

@@ -12,6 +12,7 @@ import vn.bsc.automation.screens.components.TpSlSheet;
 import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.time.Duration;
 
 /**
  * "Danh mục" - holdings of the selected sub-account.
@@ -41,7 +42,7 @@ public class PortfolioScreen extends BaseScreen {
     }
 
     public boolean isEmpty() {
-        return isVisible(Locators.a11y("Không có dữ liệu"), java.time.Duration.ofSeconds(2));
+        return isVisible(Locators.a11y("Không có dữ liệu"), Duration.ofSeconds(2));
     }
 
     /**
@@ -57,7 +58,7 @@ public class PortfolioScreen extends BaseScreen {
                     .filter(n -> n.clickable() && SYMBOL.matcher(n.desc()).matches())
                     .map(UiNode::desc).collect(Collectors.toList());
             return !found[0].isEmpty() || Locators.nfc(src).contains("Không có dữ liệu");
-        }, java.time.Duration.ofSeconds(15));
+        }, Duration.ofSeconds(15));
         return found[0];
     }
 
@@ -76,7 +77,7 @@ public class PortfolioScreen extends BaseScreen {
                 .filter(n -> n.clickable() && n.desc().contains("KL:"))
                 .filter(n -> cx >= n.x() && cx <= n.x() + n.width() && cy >= n.y() && cy <= n.y() + n.height())
                 .findFirst().orElse(label);
-        GestureUtils.tap(row.x() + row.width() / 2, row.y() + row.height() / 2);
+        GestureUtils.tap(row);
         return new TpSlSheet().waitUntilLoaded();
     }
 }

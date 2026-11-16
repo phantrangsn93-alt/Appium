@@ -17,6 +17,8 @@ import vn.bsc.automation.screens.components.AppHeader;
 import vn.bsc.automation.screens.components.BottomNavBar;
 
 import java.time.Duration;
+import org.openqa.selenium.WebDriverException;
+import vn.bsc.automation.core.driver.DeviceActions;
 
 /**
  * Business flows around authentication. Keeps tests independent of the app's current state.
@@ -70,7 +72,7 @@ public class LoginFlow {
             // previous test -> go back one level. Only while our app is in front (never Back out of another app).
             if (++misses[0] % 3 == 0 && isOurAppInFront()) {
                 LOG.info("Unknown screen - pressing Back");
-                vn.bsc.automation.core.driver.DeviceActions.back(); // iOS: app "<" / edge swipe (no system Back)
+                DeviceActions.back(); // iOS: app "<" / edge swipe (no system Back)
             }
             return false;
         }, AppConfig.appLaunchTimeout());
@@ -164,7 +166,7 @@ public class LoginFlow {
         if (!isLoggedInNow() && loginScreen.isDisplayed(Duration.ofSeconds(1))) {
             try {
                 loginScreen.tapLogin();
-            } catch (org.openqa.selenium.WebDriverException e) {
+            } catch (WebDriverException e) {
                 LOG.info("Login button vanished before the tap (tester already tapped it) - continuing");
             }
         }
@@ -255,7 +257,7 @@ public class LoginFlow {
 
     private boolean isOurAppInFront() {
         try {
-            return vn.bsc.automation.core.driver.DeviceActions.isAppInForeground();
+            return DeviceActions.isAppInForeground();
         } catch (Exception e) {
             return false;
         }
@@ -263,7 +265,7 @@ public class LoginFlow {
 
     private void hideKeyboardSilently() {
         try {
-            vn.bsc.automation.core.driver.DeviceActions.hideKeyboard();
+            DeviceActions.hideKeyboard();
         } catch (Exception ignored) {
         }
     }

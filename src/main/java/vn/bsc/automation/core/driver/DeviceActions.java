@@ -19,6 +19,8 @@ import vn.bsc.automation.core.utils.Locators;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import io.appium.java_client.AppiumBy;
+import vn.bsc.automation.core.utils.WaitUtils;
 
 /**
  * Device-level actions whose implementation differs between Android and iOS.
@@ -109,7 +111,7 @@ public final class DeviceActions {
     }
 
     private static By keyboardButton(String label) {
-        return io.appium.java_client.AppiumBy.iOSNsPredicateString(
+        return AppiumBy.iOSNsPredicateString(
                 "type == \"XCUIElementTypeButton\" AND (name == \"" + label + "\" OR label == \"" + label + "\")");
     }
 
@@ -147,7 +149,7 @@ public final class DeviceActions {
         Dimension s = driver().manage().window().getSize();
         String before = driver().getPageSource();
         GestureUtils.tap((int) (s.width * 0.055), (int) (s.height * 0.103));
-        boolean changed = vn.bsc.automation.core.utils.WaitUtils.condition(
+        boolean changed = WaitUtils.condition(
                 () -> !driver().getPageSource().equals(before), Duration.ofSeconds(2));
         if (!changed) {
             GestureUtils.swipe(new Point(2, s.height / 2), new Point((int) (s.width * 0.7), s.height / 2),

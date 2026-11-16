@@ -7,6 +7,9 @@ import vn.bsc.automation.core.utils.UiNode;
 
 import java.util.Comparator;
 import java.util.List;
+import java.time.Duration;
+import vn.bsc.automation.core.utils.GestureUtils;
+import vn.bsc.automation.core.utils.WaitUtils;
 
 /**
  * The app's own numeric keypad (opened by tapping the price / quantity value on the order form):
@@ -51,12 +54,12 @@ public class NumericKeypad extends BaseScreen {
             // the keypad's "Đóng" is the LOWEST one: other "Đóng" (e.g. a sheet closed earlier) may linger in the tree
             UiNode close = UiNode.snapshot(driver().getPageSource()).stream()
                     .filter(n -> "Đóng".equals(n.desc()))
-                    .max(java.util.Comparator.comparingInt(UiNode::y)).orElse(null);
+                    .max(Comparator.comparingInt(UiNode::y)).orElse(null);
             if (close == null) {
                 return;
             }
             tapCenterOf(close);
-            if (vn.bsc.automation.core.utils.WaitUtils.waitInvisible(digitKey, java.time.Duration.ofSeconds(3))) {
+            if (WaitUtils.waitInvisible(digitKey, Duration.ofSeconds(3))) {
                 return;
             }
         }
@@ -75,6 +78,6 @@ public class NumericKeypad extends BaseScreen {
     }
 
     private void tapCenterOf(UiNode n) {
-        vn.bsc.automation.core.utils.GestureUtils.tap(n.x() + n.width() / 2, n.y() + n.height() / 2);
+        GestureUtils.tap(n);
     }
 }

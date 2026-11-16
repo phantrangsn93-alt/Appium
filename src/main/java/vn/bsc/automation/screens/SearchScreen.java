@@ -6,6 +6,14 @@ import vn.bsc.automation.core.base.BaseScreen;
 import vn.bsc.automation.core.utils.Locators;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+import org.openqa.selenium.WebElement;
+import vn.bsc.automation.core.driver.DeviceActions;
+import vn.bsc.automation.core.utils.UiNode;
+import vn.bsc.automation.core.utils.WaitUtils;
+import vn.bsc.automation.screens.components.ContentInspector;
 
 /** "Tìm kiếm": global search with categories Chứng khoán / Tin tức / Chức năng. */
 public class SearchScreen extends BaseScreen {
@@ -20,7 +28,7 @@ public class SearchScreen extends BaseScreen {
     }
 
     private static By stockResult(String symbol) {
-        return vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,'|')]");
+        return Locators.xpath("//android.view.View[starts-with(@content-desc,'" + symbol + "\n') and contains(@content-desc,'|')]");
     }
 
     @Step("Tìm kiếm: {keyword}")
@@ -55,7 +63,7 @@ public class SearchScreen extends BaseScreen {
 
     @Step("Tìm kiếm - nhóm {category}")
     public SearchScreen openCategory(String category) {
-        if (!new vn.bsc.automation.screens.components.ContentInspector().tapVisible(category)) {
+        if (!new ContentInspector().tapVisible(category)) {
             throw new AssertionError("Không thấy nhóm " + category);
         }
         return this;
@@ -64,9 +72,9 @@ public class SearchScreen extends BaseScreen {
     /** Clears the box and types a new keyword. */
     @Step("Tìm kiếm: {keyword} (xoá từ khoá cũ)")
     public SearchScreen searchFresh(String keyword) {
-        org.openqa.selenium.WebElement el = find(input);
-        vn.bsc.automation.core.driver.DeviceActions.tap(el);
-        vn.bsc.automation.core.driver.DeviceActions.clear(el);
+        WebElement el = find(input);
+        DeviceActions.tap(el);
+        DeviceActions.clear(el);
         el.sendKeys(keyword);
         return this;
     }
@@ -75,17 +83,17 @@ public class SearchScreen extends BaseScreen {
      * Labels of the results listed under the category chips, waiting up to {@code timeout} for at least one.
      * Empty list = no result.
      */
-    public java.util.List<String> results(Duration timeout) {
-        vn.bsc.automation.screens.components.ContentInspector ci = new vn.bsc.automation.screens.components.ContentInspector();
-        java.util.List<String> out = new java.util.ArrayList<>();
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+    public List<String> results(Duration timeout) {
+        ContentInspector ci = new ContentInspector();
+        List<String> out = new ArrayList<>();
+        WaitUtils.condition(() -> {
             out.clear();
-            java.util.List<vn.bsc.automation.core.utils.UiNode> nodes = ci.content();
-            int chipsBottom = nodes.stream().filter(n -> java.util.Arrays.asList(CATEGORIES).contains(n.desc()))
+            List<UiNode> nodes = ci.content();
+            int chipsBottom = nodes.stream().filter(n -> Arrays.asList(CATEGORIES).contains(n.desc()))
                     .mapToInt(n -> n.y() + n.height()).max().orElse(0);
             nodes.stream().filter(n -> n.clickable() && n.y() >= chipsBottom
-                            && !java.util.Arrays.asList(CATEGORIES).contains(n.desc()) && !n.desc().startsWith("Tìm kiếm"))
-                    .map(vn.bsc.automation.core.utils.UiNode::desc).forEach(out::add);
+                            && !Arrays.asList(CATEGORIES).contains(n.desc()) && !n.desc().startsWith("Tìm kiếm"))
+                    .map(UiNode::desc).forEach(out::add);
             return !out.isEmpty();
         }, timeout);
         return out;

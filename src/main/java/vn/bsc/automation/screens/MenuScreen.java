@@ -10,6 +10,11 @@ import vn.bsc.automation.core.utils.Locators;
 import vn.bsc.automation.screens.components.AlertDialog;
 
 import java.util.Comparator;
+import java.time.Duration;
+import java.util.Arrays;
+import org.openqa.selenium.Dimension;
+import vn.bsc.automation.core.utils.WaitUtils;
+import vn.bsc.automation.screens.components.ActionSheet;
 
 /** Hamburger menu: profile + logout icon + feature groups. */
 public class MenuScreen extends BaseScreen {
@@ -20,7 +25,7 @@ public class MenuScreen extends BaseScreen {
     };
 
     private final By titleBar = Locators.classWithDesc("android.widget.Button", "Menu");
-    private final By descLessImages = vn.bsc.automation.core.utils.Locators.xpath("//android.widget.ImageView[@clickable='true' and not(@content-desc)]"
+    private final By descLessImages = Locators.xpath("//android.widget.ImageView[@clickable='true' and not(@content-desc)]"
             + " | //android.widget.ImageView[@clickable='true' and @content-desc='']");
 
     @Override
@@ -44,15 +49,15 @@ public class MenuScreen extends BaseScreen {
 
     /** True when any child row of the group is shown (groups are accordions: one tap expands, next collapses). */
     public boolean isGroupExpanded(MenuItem.Group group) {
-        String[] children = java.util.Arrays.stream(MenuItem.values())
+        String[] children = Arrays.stream(MenuItem.values())
                 .filter(i -> i.group == group).map(i -> i.label).toArray(String[]::new);
-        return isVisible(Locators.descMatchesAny(children), java.time.Duration.ofMillis(800));
+        return isVisible(Locators.descMatchesAny(children), Duration.ofMillis(800));
     }
 
     /**
      * Opens a menu entry: expands its group if needed, scrolls it fully into view and taps it.
      * Returns nothing - callers continue with the screen object matching {@link MenuItem#kind}
-     * ({@link vn.bsc.automation.screens.components.ActionSheet} for SHEET, {@link TransactionFormScreen} /
+     * ({@link ActionSheet} for SHEET, {@link TransactionFormScreen} /
      * {@link MenuTargetScreen} for SCREEN).
      */
     @Step("Menu > {item}")
@@ -71,12 +76,12 @@ public class MenuScreen extends BaseScreen {
     /** Waits until the element stops moving (two consecutive reads 300 ms apart give the same position). */
     private void waitUntilStill(By by) {
         Rectangle[] last = {null};
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+        WaitUtils.condition(() -> {
             Rectangle now = find(by).getRect();
             boolean still = now.equals(last[0]);
             last[0] = now;
             return still;
-        }, java.time.Duration.ofSeconds(5));
+        }, Duration.ofSeconds(5));
     }
 
     /**
@@ -84,9 +89,9 @@ public class MenuScreen extends BaseScreen {
      * the bottom edge reports its centre under the Android navigation bar, where a tap presses system HOME.
      */
     private By scrollFullyIntoView(By by) {
-        org.openqa.selenium.Dimension win = driver().manage().window().getSize();
+        Dimension win = driver().manage().window().getSize();
         for (int i = 0; i < 6; i++) {
-            if (isVisible(by, java.time.Duration.ofSeconds(1))) {
+            if (isVisible(by, Duration.ofSeconds(1))) {
                 Rectangle r = find(by).getRect();
                 if (r.getY() + r.getHeight() / 2 < win.getHeight() * 0.85) {
                     return by;
@@ -114,7 +119,7 @@ public class MenuScreen extends BaseScreen {
      * (right-most clickable image directly below the title bar).
      */
     private WebElement logoutIcon() {
-        org.openqa.selenium.Rectangle title = find(titleBar).getRect();
+        Rectangle title = find(titleBar).getRect();
         int titleBottom = title.getY() + title.getHeight();
         int rowLimit = titleBottom + 3 * title.getHeight(); // relative to title height -> density independent
         return findAll(descLessImages).stream()

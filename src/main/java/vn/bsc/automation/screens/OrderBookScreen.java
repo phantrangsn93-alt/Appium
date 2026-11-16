@@ -8,6 +8,7 @@ import vn.bsc.automation.core.utils.GestureUtils;
 import vn.bsc.automation.core.utils.Locators;
 import vn.bsc.automation.core.utils.UiNode;
 import vn.bsc.automation.data.OrderRegistry.PlacedOrder;
+import vn.bsc.automation.data.OrderSpec;
 import vn.bsc.automation.screens.components.OrderConfirmDialog;
 
 import java.text.NumberFormat;
@@ -16,6 +17,26 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import org.openqa.selenium.Point;
+import vn.bsc.automation.core.config.ConfigReader;
+import vn.bsc.automation.core.config.Platform;
+import vn.bsc.automation.core.utils.WaitUtils;
+import vn.bsc.automation.data.OrderCase;
+import vn.bsc.automation.screens.components.AlertDialog;
+
+import static vn.bsc.automation.data.OrderSpec.hasStatus;
+import static vn.bsc.automation.data.OrderSpec.rowMatches;
+import static vn.bsc.automation.data.OrderSpec.text;
 
 /**
  * "Sổ lệnh": summary, status filters, order rows, Sửa / Huỷ / Huỷ tất cả.
@@ -58,10 +79,6 @@ public class OrderBookScreen extends BaseScreen {
 
     // ------------------------------------------------------------------ rows
 
-    private static String qtyText(long qty) {
-        return NumberFormat.getIntegerInstance(Locale.US).format(qty); // 1,000
-    }
-
     /**
      * Rows = nodes whose content-desc starts with a symbol line ("AAA\nMUA\n..."). Identified by content, NOT by
      * clickable: while the list reloads (after a filter tap) every row is briefly reported clickable=false.
@@ -90,99 +107,11 @@ public class OrderBookScreen extends BaseScreen {
     public static final Pattern STATUS_CANCELLED = status("order.status.cancelled", "Đã huỷ|Đã hủy");
 
     private static Pattern status(String key, String def) {
-        String alt = Locators.nfc(vn.bsc.automation.core.config.ConfigReader.get(key, def));
+        String alt = Locators.nfc(ConfigReader.get(key, def));
         return Pattern.compile("(?:" + alt + ")", Pattern.CASE_INSENSITIVE | Pattern.UNICODE_CASE);
     }
 
-    /** What identifies an order in the book. {@code price} null = not checked (market / trailing). */
-    public record OrderSpec(String symbol, boolean buy, long quantity, java.math.BigDecimal price, String priceLabel,
-                            boolean conditional) {
-
-        /**
-         * Normal orders are matched on their price (or market price label); conditional orders are listed with
-         * their TYPE instead of a price ("AAA | MUA | Stop Limit | 100 | ● Chờ kích hoạt").
-         */
-        public static OrderSpec of(PlacedOrder o) {
-            boolean buy = o.source().side() == vn.bsc.automation.data.OrderCase.Side.BUY;
-            if (o.source().inConditionalBook()) {
-                return new OrderSpec(o.source().symbol(), buy, o.quantity(), null, conditionalLabel(o.source().orderType()), true);
-            }
-            return new OrderSpec(o.source().symbol(), buy, o.quantity(), o.price(),
-                    o.source().isMarketType() ? o.source().orderType() : null, false);
-        }
-
-        public static String conditionalLabel(String type) {
-            return switch (type) {
-                case "STOP_LIMIT" -> "Stop Limit";
-                case "TRAILING_STOP" -> "Trailing Stop";
-                case "OCO" -> "OCO";
-                case "TPSL" -> "TP/SL"; // to confirm on device
-                case "LO" -> "Limit"; // LO-GTC row in the "Điều kiện" tab: "AAA | MUA | Limit | 100 | ● Chờ kích hoạt"
-                default -> type;
-            };
-        }
-
-        public OrderSpec withPriceAndQty(java.math.BigDecimal p, long q) {
-            return new OrderSpec(symbol, buy, q, p, priceLabel, conditional);
-        }
-
-        @Override
-        public String toString() {
-            return (buy ? "MUA " : "BÁN ") + symbol + " x" + quantity + (price != null ? " @" + price.toPlainString() : "")
-                    + (priceLabel != null ? " " + priceLabel : "");
-        }
-    }
-
-    /** Lines of the row (NFC, zero-width chars removed by UiNode/Locators.nfc). */
-    private static List<String> lines(UiNode row) {
-        return java.util.Arrays.stream(row.desc().split("\n")).map(String::trim).collect(Collectors.toList());
-    }
-
-    /** Row matches symbol, side (M/B), quantity and - when given - price or market price label. */
-    public static boolean rowMatches(UiNode row, OrderSpec o) {
-        List<String> l = lines(row);
-        if (l.isEmpty() || !l.get(0).equals(o.symbol())) {
-            return false;
-        }
-        boolean side = o.buy() ? l.stream().anyMatch(x -> x.equals("M") || x.equalsIgnoreCase("Mua"))
-                : l.stream().anyMatch(x -> x.equals("B") || x.equalsIgnoreCase("Bán"));
-        boolean qty = l.contains(qtyText(o.quantity())) || l.contains(String.valueOf(o.quantity()));
-        boolean price = true;
-        if (o.price() != null || o.priceLabel() != null) {
-            // ATO/ATC rows show either the type label or the price (production: "AAA | MUA | 7.46 | 100")
-            price = (o.priceLabel() != null && l.contains(o.priceLabel()))
-                    || (o.price() != null && priceTexts(o.price()).stream().anyMatch(l::contains));
-        }
-        return side && qty && price;
-    }
-
-    /** Price as it may be displayed: 7.53 / 7.5 / 7,530 (x1000) / 1,867.40. */
-    static List<String> priceTexts(java.math.BigDecimal p) {
-        java.text.DecimalFormat grouped2 = new java.text.DecimalFormat("#,##0.00", java.text.DecimalFormatSymbols.getInstance(Locale.US));
-        List<String> out = new java.util.ArrayList<>(List.of(p.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString(),
-                p.stripTrailingZeros().toPlainString(),
-                grouped2.format(p),
-                NumberFormat.getIntegerInstance(Locale.US).format(p.multiply(java.math.BigDecimal.valueOf(1000)))));
-        if (p.compareTo(java.math.BigDecimal.valueOf(1000)) >= 0) {
-            // price taken from a message in VND ("giá 7,460.00") while the book shows x1000 ("7.46")
-            java.math.BigDecimal k = p.divide(java.math.BigDecimal.valueOf(1000));
-            out.add(k.setScale(2, java.math.RoundingMode.HALF_UP).toPlainString());
-            out.add(k.stripTrailingZeros().toPlainString());
-        }
-        return out;
-    }
-
-    /** Status line looks like "● Chờ kích hoạt" (dot prefix): match by find(), not on the whole line. */
-    public static boolean hasStatus(UiNode row, Pattern status) {
-        return lines(row).stream().anyMatch(x -> status.matcher(x).find());
-    }
-
-    /** Text of the row (for reports). */
-    public static String text(UiNode row) {
-        return row.desc().replace("\n", " | ");
-    }
-
-    public java.util.Optional<UiNode> find(OrderSpec o, Pattern status) {
+    public Optional<UiNode> find(OrderSpec o, Pattern status) {
         return orderRows().stream().filter(r -> rowMatches(r, o) && (status == null || hasStatus(r, status))).findFirst();
     }
 
@@ -191,14 +120,14 @@ public class OrderBookScreen extends BaseScreen {
      * Conditional orders are listed under the "Điều kiện" filter.
      */
     @Step("Sổ lệnh: chờ lệnh {o} với trạng thái {status}")
-    public java.util.Optional<UiNode> waitFor(OrderSpec o, Pattern status, Duration timeout) {
+    public Optional<UiNode> waitFor(OrderSpec o, Pattern status, Duration timeout) {
         String filter = o.conditional() ? "Điều kiện" : "Tất cả";
-        java.util.Optional<UiNode>[] hit = new java.util.Optional[]{java.util.Optional.empty()};
+        Optional<UiNode>[] hit = new Optional[]{Optional.empty()};
         int[] round = {0};
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+        WaitUtils.condition(() -> {
             if (round[0]++ % 4 == 0) {
                 selectFilter(filter); // reload the list now and then, not on every poll (it would never settle)
-                vn.bsc.automation.core.utils.WaitUtils.condition(() -> false, Duration.ofMillis(800));
+                WaitUtils.pause(Duration.ofMillis(800));
             }
             hit[0] = find(o, status);
             return hit[0].isPresent();
@@ -213,15 +142,10 @@ public class OrderBookScreen extends BaseScreen {
     /** Number of rows of {@code o} with {@code status} (list reloaded via its filter). */
     public int count(OrderSpec o, Pattern status) {
         selectFilter(o.conditional() ? "Điều kiện" : "Tất cả");
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> !orderRows().isEmpty(), Duration.ofSeconds(4));
+        WaitUtils.condition(() -> !orderRows().isEmpty(), Duration.ofSeconds(4));
         return (int) orderRows().stream().filter(r -> rowMatches(r, o) && hasStatus(r, status)).count();
     }
 
-    /** Legacy match used by the cancel-all safety check (symbol + quantity). */
-    public boolean rowMatches(UiNode row, PlacedOrder o) {
-        String d = row.desc();
-        return d.startsWith(o.source().symbol()) && d.contains(qtyText(o.quantity()));
-    }
 
     /** The ACTIVE row of the order (never an "Đã sửa"/"Đã huỷ" history row of the same order). */
     public UiNode findRow(PlacedOrder o) {
@@ -229,13 +153,11 @@ public class OrderBookScreen extends BaseScreen {
         // "Chờ" lists only live orders: in "Tất cả" identical cancelled rows of earlier runs hide the active one
         selectFilter(o.source().inConditionalBook() ? "Điều kiện" : "Chờ");
         // the list reloads after the filter tap: wait until the order's rows are there
-        vn.bsc.automation.core.utils.WaitUtils.condition(
+        WaitUtils.condition(
                 () -> orderRows().stream().anyMatch(r -> rowMatches(r, spec)), Duration.ofSeconds(8));
         List<UiNode> rows = orderRows();
         return rows.stream().filter(r -> rowMatches(r, spec) && hasStatus(r, placedStatus(spec))).findFirst()
                 .or(() -> rows.stream().filter(r -> rowMatches(r, spec)
-                        && !hasStatus(r, STATUS_MODIFIED) && !hasStatus(r, STATUS_CANCELLED)).findFirst())
-                .or(() -> rows.stream().filter(r -> rowMatches(r, o)
                         && !hasStatus(r, STATUS_MODIFIED) && !hasStatus(r, STATUS_CANCELLED)).findFirst())
                 .orElseThrow(() -> new AssertionError("Order not found in Sổ lệnh: " + spec));
     }
@@ -243,9 +165,9 @@ public class OrderBookScreen extends BaseScreen {
     private static final Pattern PLACED_TIME = Pattern.compile("Giờ đặt\\n(\\d{2}:\\d{2}:\\d{2})");
 
     /** "Giờ đặt" of an EXPANDED row (tapping a row expands its details inline: TK, Giá, Giờ đặt, Kết thúc, Xem, Huỷ). */
-    public static java.util.Optional<java.time.LocalTime> placedTime(UiNode row) {
+    public static Optional<LocalTime> placedTime(UiNode row) {
         var m = PLACED_TIME.matcher(row.desc());
-        return m.find() ? java.util.Optional.of(java.time.LocalTime.parse(m.group(1))) : java.util.Optional.empty();
+        return m.find() ? Optional.of(LocalTime.parse(m.group(1))) : Optional.empty();
     }
 
     /** Buttons of an expanded row ("Xem", "Huỷ", "Sửa") may sit below the fold for rows near the bottom. */
@@ -266,12 +188,12 @@ public class OrderBookScreen extends BaseScreen {
         }
         int dist = (int) (row.y() - h * 0.30);
         int x = Math.max(30, row.x() + 40), from = (int) (h * 0.82);
-        GestureUtils.swipe(new org.openqa.selenium.Point(x, from), new org.openqa.selenium.Point(x, Math.max(from - dist, (int) (h * 0.35))),
+        GestureUtils.swipe(new Point(x, from), new Point(x, Math.max(from - dist, (int) (h * 0.35))),
                 Duration.ofMillis(900));
         int expectedY = row.y() - dist;
         String head = row.desc().split("\n")[0];
         return orderRows().stream().filter(r -> r.desc().startsWith(head) && r.desc().equals(row.desc()))
-                .min(java.util.Comparator.comparingInt(r -> Math.abs(r.y() - expectedY))).orElse(row);
+                .min(Comparator.comparingInt(r -> Math.abs(r.y() - expectedY))).orElse(row);
     }
 
     /** Taps a row and returns its expanded node (same first lines + details), or the row itself. */
@@ -279,8 +201,8 @@ public class OrderBookScreen extends BaseScreen {
         final UiNode row = bringToUpperArea(original);
         GestureUtils.tap(row.x() + row.width() / 2, row.y() + Math.min(row.height(), 170) / 2);
         String head = row.desc().split("\n")[0];
-        java.util.Optional<UiNode>[] got = new java.util.Optional[]{java.util.Optional.empty()};
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+        Optional<UiNode>[] got = new Optional[]{Optional.empty()};
+        WaitUtils.condition(() -> {
             got[0] = orderRows().stream().filter(r -> r.desc().startsWith(head) && placedTime(r).isPresent()
                     && Math.abs(r.y() - row.y()) < 40).findFirst();
             return got[0].isPresent();
@@ -300,7 +222,7 @@ public class OrderBookScreen extends BaseScreen {
                 && !hasStatus(r, STATUS_MODIFIED) && !hasStatus(r, STATUS_CANCELLED)).collect(Collectors.toList());
         UiNode chosen = null;
         if (candidates.size() > 1 && o.placedAt() != null) {
-            java.time.LocalTime t = o.placedAt().toLocalTime();
+            LocalTime t = o.placedAt().toLocalTime();
             for (int i = 0; i < candidates.size() && chosen == null; i++) {
                 UiNode c = orderRows().stream().filter(r -> rowMatches(r, spec)
                         && !hasStatus(r, STATUS_MODIFIED) && !hasStatus(r, STATUS_CANCELLED)).skip(i).findFirst().orElse(null);
@@ -308,7 +230,7 @@ public class OrderBookScreen extends BaseScreen {
                     break;
                 }
                 UiNode ex = expand(c);
-                if (placedTime(ex).map(pt -> Math.abs(java.time.Duration.between(pt, t).getSeconds()) <= 90).orElse(false)) {
+                if (placedTime(ex).map(pt -> Math.abs(Duration.between(pt, t).getSeconds()) <= 90).orElse(false)) {
                     chosen = ex;
                 }
             }
@@ -317,6 +239,17 @@ public class OrderBookScreen extends BaseScreen {
             }
         } else {
             chosen = expand(first);
+            if (o.placedAt() != null) {
+                LocalTime t = o.placedAt().toLocalTime();
+                Optional<LocalTime> pt = placedTime(chosen);
+                if (pt.isPresent() && Math.abs(Duration.between(pt.get(), t).getSeconds()) > 90) {
+                    throw new AssertionError("DỪNG AN TOÀN: dòng " + text(chosen) + " có Giờ đặt " + pt.get()
+                            + " khác giờ test đặt lệnh " + t + " - không phải lệnh của test");
+                }
+                if (pt.isEmpty()) {
+                    log.warn("Không đọc được Giờ đặt của dòng duy nhất khớp {} - tiếp tục theo mã/chiều/KL/giá", spec);
+                }
+            }
         }
         AllureUtils.attachScreenshot("Chi tiết lệnh " + o.source().id());
         AllureUtils.attachText("Dòng lệnh được chọn", text(chosen));
@@ -326,11 +259,11 @@ public class OrderBookScreen extends BaseScreen {
      * Cleanup helper: cancels every active conditional row of {@code spec} placed at/after {@code from} today
      * (rows placed earlier are left untouched). Returns the number of cancel requests sent.
      */
-    public int cancelConditionalPlacedFrom(OrderSpec spec, java.time.LocalTime from, int max) {
+    public int cancelConditionalPlacedFrom(OrderSpec spec, LocalTime from, int max) {
         int done = 0;
         for (int guard = 0; guard < max; guard++) {
             selectFilter("Điều kiện");
-            vn.bsc.automation.core.utils.WaitUtils.condition(() -> !orderRows().isEmpty(), Duration.ofSeconds(6));
+            WaitUtils.condition(() -> !orderRows().isEmpty(), Duration.ofSeconds(6));
             UiNode target = null;
             List<UiNode> rows = orderRows().stream().filter(r -> rowMatches(r, spec) && hasStatus(r, STATUS_CONDITIONAL_PLACED))
                     .collect(Collectors.toList());
@@ -353,10 +286,10 @@ public class OrderBookScreen extends BaseScreen {
             tapRowButton("Huỷ");
             OrderConfirmDialog confirm = new OrderConfirmDialog().waitUntilLoaded();
             confirm.enterPinAndConfirm("Dọn lệnh thừa");
-            vn.bsc.automation.screens.components.AlertDialog d = new vn.bsc.automation.screens.components.AlertDialog();
+            AlertDialog d = new AlertDialog();
             if (d.isShown(Duration.ofSeconds(10))) {
                 AllureUtils.attachText("Kết quả huỷ", d.getMessage());
-                if (d.hasButton(vn.bsc.automation.screens.components.AlertDialog.BTN_CLOSE)) {
+                if (d.hasButton(AlertDialog.BTN_CLOSE)) {
                     d.close();
                 }
             }
@@ -368,7 +301,7 @@ public class OrderBookScreen extends BaseScreen {
     // ------------------------------------------------------------------ actions (Excel No.6 / 7 / 8)
 
     /** Price / quantity shown on the modify form right before "Sửa ..." (null price = no price stepper). */
-    public record Modified(java.math.BigDecimal price, long quantity) {
+    public record Modified(BigDecimal price, long quantity) {
     }
 
     /**
@@ -392,7 +325,7 @@ public class OrderBookScreen extends BaseScreen {
                 form.decreasePrice();
             }
         }
-        java.math.BigDecimal newPrice = o.price();
+        BigDecimal newPrice = o.price();
         long qty = newQuantity > 0 ? newQuantity : o.quantity();
         try {
             newPrice = form.getPrice();
@@ -402,8 +335,9 @@ public class OrderBookScreen extends BaseScreen {
         }
         // "Sửa mua" / "Sửa bán" (UAT) or "SỬA MUA : 1,396,000" (production 2.0.20)
         tap(Locators.descRegex("(?:" + Locators.anyForm("Sửa ") + "|" + Locators.anyForm("SỬA ") + ").+"));
-        new OrderConfirmDialog().waitUntilLoaded();
-        new OrderConfirmDialog().enterPinAndConfirm("Sửa lệnh " + o.source().id());
+        OrderConfirmDialog confirm = new OrderConfirmDialog().waitUntilLoaded();
+        confirm.verifyShows(o.source().symbol(), qty, "Sửa lệnh " + o.source().id());
+        confirm.enterPinAndConfirm("Sửa lệnh " + o.source().id());
         return new Modified(newPrice, qty);
     }
 
@@ -412,8 +346,9 @@ public class OrderBookScreen extends BaseScreen {
     public void cancel(PlacedOrder o) {
         openRow(o);
         tapRowButton("Huỷ"); // Button of the expanded row, not the "Huỷ" status filter
-        new OrderConfirmDialog().waitUntilLoaded();
-        new OrderConfirmDialog().enterPinAndConfirm("Huỷ lệnh " + o.source().id());
+        OrderConfirmDialog confirm = new OrderConfirmDialog().waitUntilLoaded();
+        confirm.verifyShows(o.source().symbol(), o.quantity(), "Huỷ lệnh " + o.source().id());
+        confirm.enterPinAndConfirm("Huỷ lệnh " + o.source().id());
     }
 
     /**
@@ -424,12 +359,13 @@ public class OrderBookScreen extends BaseScreen {
     public void cancelAllOnlyTestOrders(List<PlacedOrder> testOrders) {
         selectFilter("Chờ");
         waitForRows(Duration.ofSeconds(5));
-        List<UiNode> pendingRows = orderRows();
+        List<OrderSpec> specs = testOrders.stream().map(OrderSpec::of).collect(Collectors.toList());
+        List<UiNode> pendingRows = allRowsOfList();
         AllureUtils.attachPageSource("Sổ lệnh - lệnh chờ trước khi Huỷ tất cả");
         List<String> foreign = pendingRows.stream()
-                .filter(r -> testOrders.stream().noneMatch(o -> rowMatches(r, o)))
+                .filter(r -> specs.stream().noneMatch(sp -> rowMatches(r, sp))) // symbol + side + quantity + price
                 .map(r -> r.desc().replace('\n', ' '))
-                .collect(Collectors.toList());
+                .distinct().collect(Collectors.toList());
         if (!foreign.isEmpty()) {
             throw new AssertionError("DỪNG AN TOÀN: có lệnh chờ không do test tạo, không bấm Huỷ tất cả: " + foreign);
         }
@@ -437,12 +373,52 @@ public class OrderBookScreen extends BaseScreen {
             throw new AssertionError("Không có lệnh chờ để Huỷ tất cả");
         }
         tap(cancelAllButton);
-        tap(Locators.descRegex(Locators.anyForm("Huỷ ") + "[0-9]+" + Locators.anyForm(" mã"))); // "Huỷ <n> mã"
+        // "Huỷ <n> mã": n (orders or symbols) can never exceed the number of test orders when all pending are ours
+        By confirmAll = Locators.descRegex(Locators.anyForm("Huỷ ") + "[0-9]+" + Locators.anyForm(" mã"));
+        String label = Locators.nfc(find(confirmAll).getAttribute(Platform.labelAttr()));
+        Matcher n = Pattern.compile("([0-9]+)").matcher(label == null ? "" : label);
+        long testPending = testOrders.stream().filter(o -> !o.source().inConditionalBook()).count();
+        if (n.find() && Long.parseLong(n.group(1)) > testPending) {
+            pressBack();
+            throw new AssertionError("DỪNG AN TOÀN: app sẽ huỷ " + n.group(1) + " (" + label + ") nhưng test chỉ có "
+                    + testPending + " lệnh chờ - không huỷ");
+        }
+        AllureUtils.attachText("Huỷ tất cả", label + " | lệnh của test: " + testPending);
+        tap(confirmAll);
         new OrderConfirmDialog().waitUntilLoaded();
         new OrderConfirmDialog().enterPinAndConfirm("Huỷ tất cả");
     }
 
+    /**
+     * Every row of the current list, scrolling only when it runs below the "Huỷ tất cả" bar; stops when a scroll
+     * brings nothing new (bottom reached), then returns to the top.
+     */
+    private List<UiNode> allRowsOfList() {
+        List<UiNode> all = new ArrayList<>(orderRows());
+        int barY = UiNode.snapshot(driver().getPageSource()).stream()
+                .filter(x -> Locators.nfc(x.desc()).matches("Hu[ỷy] tất cả|Hủy tất cả")).mapToInt(UiNode::y).min()
+                .orElse(driver().manage().window().getSize().height);
+        boolean fits = all.isEmpty() || all.stream().mapToInt(r -> r.y() + r.height()).max().getAsInt() < barY - 40;
+        int scrolls = 0;
+        if (!fits) {
+            List<String> before = all.stream().map(r -> r.desc() + "@" + r.y()).collect(Collectors.toList());
+            for (; scrolls < 8; scrolls++) {
+                GestureUtils.scrollBy(0.5);
+                List<UiNode> now = orderRows();
+                List<String> sig = now.stream().map(r -> r.desc() + "@" + r.y()).collect(Collectors.toList());
+                if (sig.equals(before)) {
+                    break; // bottom reached
+                }
+                all.addAll(now);
+                before = sig;
+            }
+            for (int i = 0; i <= scrolls; i++) {
+                GestureUtils.scrollUp();
+            }
+        }
+        return all;
+    }
     private void waitForRows(Duration d) {
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> !orderRows().isEmpty(), d);
+        WaitUtils.condition(() -> !orderRows().isEmpty(), d);
     }
 }

@@ -28,7 +28,7 @@ public class AlertDialog extends BaseScreen {
     private static final String TITLE = "Thông báo";
 
     /** Any non-button View with text: the modal hides the semantics of the page below it. */
-    private final By textNodes = vn.bsc.automation.core.utils.Locators.xpath("//android.view.View[string-length(@content-desc)>0]");
+    private final By textNodes = Locators.xpath("//android.view.View[string-length(@content-desc)>0]");
     private static final String BARRIER = "Bỏ qua";
     /** Either the modal barrier or one of the standard dialog buttons (some dialogs have no barrier node). */
     /**

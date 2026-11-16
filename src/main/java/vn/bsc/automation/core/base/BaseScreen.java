@@ -17,6 +17,12 @@ import vn.bsc.automation.core.utils.WaitUtils;
 
 import java.time.Duration;
 import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.util.function.Supplier;
+import org.openqa.selenium.TimeoutException;
+import vn.bsc.automation.core.utils.AllureUtils;
 
 /**
  * Base for every screen / component object.
@@ -99,7 +105,7 @@ public abstract class BaseScreen {
             WebElement el;
             try {
                 el = WaitUtils.clickable(by);
-            } catch (org.openqa.selenium.TimeoutException e) {
+            } catch (TimeoutException e) {
                 evidence("Không bấm được: " + by);
                 throw e;
             }
@@ -149,7 +155,11 @@ public abstract class BaseScreen {
      */
     protected void tapTab(By tab) {
         tap(tab);
-        WaitUtils.condition(() -> isSelected(tab), Duration.ofSeconds(5));
+        if (!WaitUtils.condition(() -> isSelected(tab), Duration.ofSeconds(4))) {
+            // a tab at the edge of a scrollable tab bar: the first tap may only scroll the bar - tap once more
+            GestureUtils.tapCenter(find(tab));
+            WaitUtils.condition(() -> isSelected(tab), Duration.ofSeconds(4));
+        }
     }
 
     protected boolean isChecked(By by) {
@@ -170,12 +180,12 @@ public abstract class BaseScreen {
     /** Screenshot + page source into the report (and target/evidence/) when an interaction fails. */
     protected void evidence(String title) {
         try {
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot(title);
+            AllureUtils.attachScreenshot(title);
             String src = driver().getPageSource();
             Allure.addAttachment(title + " (page source)", "text/xml", src, ".xml");
-            java.nio.file.Path dir = java.nio.file.Paths.get(System.getProperty("results.dir", "target"), "evidence");
-            java.nio.file.Files.createDirectories(dir);
-            java.nio.file.Files.writeString(dir.resolve(System.currentTimeMillis() + ".xml"), src);
+            Path dir = Paths.get(System.getProperty("results.dir", "target"), "evidence");
+            Files.createDirectories(dir);
+            Files.writeString(dir.resolve(System.currentTimeMillis() + ".xml"), src);
         } catch (Exception ignored) {
             // evidence is best effort
         }
@@ -199,7 +209,7 @@ public abstract class BaseScreen {
         }
     }
 
-    private <T> T retryOnStaleGet(java.util.function.Supplier<T> s) {
+    private <T> T retryOnStaleGet(Supplier<T> s) {
         for (int i = 0; ; i++) {
             try {
                 return s.get();

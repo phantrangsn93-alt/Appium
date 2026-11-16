@@ -1,9 +1,12 @@
 package vn.bsc.automation.core.config;
 
+import vn.bsc.automation.core.utils.Locators;
+import vn.bsc.automation.core.utils.UiNode;
+
 /**
  * Platform switches in one place. Page objects describe elements with Android "roles"
- * (android.widget.Button / EditText / ImageView / View); {@link vn.bsc.automation.core.utils.Locators}
- * and {@link vn.bsc.automation.core.utils.UiNode} translate them for iOS, so screens stay platform-neutral.
+ * (android.widget.Button / EditText / ImageView / View); {@link Locators}
+ * and {@link UiNode} translate them for iOS, so screens stay platform-neutral.
  */
 public final class Platform {
 

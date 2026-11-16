@@ -7,13 +7,19 @@ import vn.bsc.automation.core.utils.WaitUtils;
 import vn.bsc.automation.data.OrderCase;
 import vn.bsc.automation.data.PriceSpec;
 import vn.bsc.automation.screens.OrderFormScreen;
-import vn.bsc.automation.screens.components.AlertDialog;
 import vn.bsc.automation.screens.components.OrderConfirmDialog;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.List;
 import java.util.regex.Pattern;
+import java.util.regex.Matcher;
+import org.slf4j.LoggerFactory;
+import org.testng.SkipException;
+import vn.bsc.automation.core.config.AppConfig;
+import vn.bsc.automation.core.utils.Locators;
+import vn.bsc.automation.screens.PortfolioScreen;
+import vn.bsc.automation.screens.components.TpSlSheet;
 
 /** Business flow: fill the order form from an {@link OrderCase} row and submit it (real order). */
 public class OrderFlow {
@@ -31,32 +37,6 @@ public class OrderFlow {
         Outcome withBalance(Long b) {
             return new Outcome(success, message, price, b);
         }
-    }
-
-    private static final Pattern SUCCESS = Pattern.compile(ConfigReader.get("order.success.pattern", "(?i)(?s).*thành công.*"));
-    private static final Pattern SUCCESS_BUY = Pattern.compile(vn.bsc.automation.core.utils.Locators.nfc(
-            ConfigReader.get("order.success.buy.pattern", "(?is).*mua.*thành công.*|.*thành công.*mua.*")));
-    private static final Pattern SUCCESS_SELL = Pattern.compile(vn.bsc.automation.core.utils.Locators.nfc(
-            ConfigReader.get("order.success.sell.pattern", "(?is).*bán.*thành công.*|.*thành công.*bán.*")));
-
-    private static final Pattern SYSTEM_ERROR = Pattern.compile(
-            ConfigReader.get("order.systemError.pattern", "(?is).*(E_SYSTEM_ERROR|Lỗi hệ thống).*"));
-
-    /**
-     * System / technical errors (e.g. E_SYSTEM_ERROR) are ALWAYS a test failure - they are never accepted as
-     * the expected "rejected outside the session" business response.
-     */
-    public static boolean isSystemError(String msg) {
-        return msg != null && SYSTEM_ERROR.matcher(msg).matches();
-    }
-
-    /** "Mua ... thành công" for a buy order / "Bán ... thành công" for a sell order. */
-    public static boolean isSideSuccessMessage(OrderCase.Side side, String msg) {
-        String m = msg == null ? "" : vn.bsc.automation.core.utils.Locators.nfc(msg);
-        if (m.matches("(?is).*TP/SL thành công.*")) {
-            return side == OrderCase.Side.SELL; // "Đặt lệnh TP/SL thành công" (TP/SL = sell of a holding)
-        }
-        return (side == OrderCase.Side.BUY ? SUCCESS_BUY : SUCCESS_SELL).matcher(m).matches();
     }
 
     /**
@@ -183,20 +163,29 @@ public class OrderFlow {
     @Step("Đặt lệnh TP/SL: {c}")
     public Outcome placeTpSl(OrderCase c) {
         lastTpSlTarget = null;
-        if (!vn.bsc.automation.core.config.AppConfig.orderSubmitEnabled()) {
+        if (!AppConfig.orderSubmitEnabled()) {
             throw new IllegalStateException("SAFETY GUARD: real orders are disabled (order.submit.enabled=false)");
         }
         navigator.openTrading().openOrderForm().selectSubAccount(c.subAccountName());
-        vn.bsc.automation.screens.PortfolioScreen portfolio = navigator.openTrading().openPortfolio();
+        PortfolioScreen portfolio = navigator.openTrading().openPortfolio();
         List<String> held = portfolio.holdings();
         if (held.isEmpty()) {
             return new Outcome(false, "Danh mục trống: không có mã đang nắm giữ để đặt TP/SL", null);
         }
-        String symbol = held.contains(c.symbol()) ? c.symbol() : held.get(0);
-        vn.bsc.automation.screens.components.TpSlSheet sheet = portfolio.openTpSl(symbol);
+        String symbol = c.symbol();
+        if (!held.contains(symbol)) {
+            // never place a REAL TP/SL on an arbitrary holding unless explicitly allowed
+            if (!ConfigReader.getBool("order.tpsl.any.holding", false)) {
+                throw new SkipException("Danh mục không có mã " + symbol + " (đang có: " + held
+                        + "). Đặt order.symbol.sell=<mã đang nắm giữ> hoặc order.tpsl.any.holding=true");
+            }
+            symbol = held.get(0);
+            LoggerFactory.getLogger(OrderFlow.class).warn("TP/SL: không có {} trong danh mục - dùng mã đầu tiên {} (order.tpsl.any.holding=true)", c.symbol(), symbol);
+        }
+        TpSlSheet sheet = portfolio.openTpSl(symbol);
         long qty = Math.min(c.quantity(), sheet.maxQuantity());
-        BigDecimal tp = shift(vn.bsc.automation.screens.components.TpSlSheet.hintValue(sheet.takeProfitHint()), c.price());
-        BigDecimal sl = shift(vn.bsc.automation.screens.components.TpSlSheet.hintValue(sheet.stopLossHint()), c.triggerPrice());
+        BigDecimal tp = shift(TpSlSheet.hintValue(sheet.takeProfitHint()), c.price());
+        BigDecimal sl = shift(TpSlSheet.hintValue(sheet.stopLossHint()), c.triggerPrice());
         AllureUtils.attachText("TP/SL", symbol + " KL " + qty + " | Chốt lời " + tp + " | Cắt lỗ " + sl);
         lastTpSlTarget = c.withTarget(symbol, qty);
         sheet.setQuantity(qty).setTakeProfit(tp).setStopLoss(sl);
@@ -216,6 +205,17 @@ public class OrderFlow {
      * a keypad digit lost or doubled on a new platform.
      */
     void verifyFormBeforeSubmit(OrderCase c, FilledForm f) {
+        OrderFormScreen form = f.form();
+        // side: the submit button must be MUA for a buy, BÁN for a sell (one page source, no scroll if visible)
+        OrderFormScreen.Side want = c.side() == OrderCase.Side.BUY ? OrderFormScreen.Side.BUY : OrderFormScreen.Side.SELL;
+        OrderFormScreen.Side side = form.submitSideOnScreen().orElseGet(form::currentSide);
+        block(side != want, "Chiều lệnh trên form = " + side + " khác dữ liệu " + want, c);
+        // sub-account and symbol
+        String sub = form.getSubAccount();
+        String wantSub = Locators.nfc(c.subAccountName());
+        block(!sub.startsWith(wantSub + " - "), "Tiểu khoản trên form = '" + sub + "' khác '" + wantSub + "'", c);
+        String symbol = form.getSelectedStock().symbol();
+        block(!c.symbol().equalsIgnoreCase(symbol), "Mã trên form = " + symbol + " khác dữ liệu " + c.symbol(), c);
         long qty = f.form().getQuantity();
         if (qty != c.quantity()) {
             AllureUtils.attachScreenshot("CHẶN GỬI LỆNH - KL sai");
@@ -231,7 +231,15 @@ public class OrderFlow {
                         + " (" + c.id() + ") - KHÔNG gửi lệnh");
             }
         }
-        AllureUtils.attachText("Kiểm tra trước khi gửi", "KL " + qty + (limitPrice ? ", giá " + f.price() : "") + " - khớp dữ liệu");
+        AllureUtils.attachText("Kiểm tra trước khi gửi", side + " " + symbol + " | " + sub + " | KL " + qty
+                + (limitPrice ? ", giá " + f.price() : "") + " - khớp dữ liệu");
+    }
+
+    private static void block(boolean wrong, String what, OrderCase c) {
+        if (wrong) {
+            AllureUtils.attachScreenshot("CHẶN GỬI LỆNH - " + what);
+            throw new IllegalStateException("SAFETY: " + what + " (" + c.id() + ") - KHÔNG gửi lệnh");
+        }
     }
 
     /** "HINT+0.1" / "HINT-0.2" / "" (= hint) / "7.5" (absolute) relative to {@code hint}. */
@@ -239,7 +247,7 @@ public class OrderFlow {
         if (spec == null || spec.isBlank() || "HINT".equalsIgnoreCase(spec.trim())) {
             return hint;
         }
-        java.util.regex.Matcher m = Pattern.compile("(?i)HINT\\s*([+-])\\s*([0-9.]+)").matcher(spec.trim());
+        Matcher m = Pattern.compile("(?i)HINT\\s*([+-])\\s*([0-9.]+)").matcher(spec.trim());
         if (m.matches()) {
             BigDecimal d = new BigDecimal(m.group(2));
             return "+".equals(m.group(1)) ? hint.add(d) : hint.subtract(d);
@@ -295,84 +303,10 @@ public class OrderFlow {
         };
     }
 
-    /** Waits for the app's result dialog after "Xác nhận". */
+    private final OrderResultReader results = new OrderResultReader();
+
+    /** Waits for the app's result (dialog / toast) after "Xác nhận" - see {@link OrderResultReader}. */
     public Outcome readResult(BigDecimal price) {
-        // The result can be a modal dialog OR a short-lived toast / snackbar (gone after ~2 s):
-        // poll fast (one page-source per round) and keep a burst of screenshots of the first seconds as evidence.
-        AlertDialog dialog = new AlertDialog();
-        var d = vn.bsc.automation.core.driver.DriverManager.getDriver();
-        long end = System.currentTimeMillis() + 30_000, burstEnd = System.currentTimeMillis() + 3_000;
-        int shots = 0;
-        while (System.currentTimeMillis() < end) {
-            String src;
-            try {
-                src = d.getPageSource();
-            } catch (Exception e) {
-                continue;
-            }
-            var nodes = vn.bsc.automation.core.utils.UiNode.snapshot(src);
-            boolean dialogShown = nodes.stream().anyMatch(n -> n.className().endsWith("Button")
-                    && java.util.List.of(AlertDialog.BTN_CLOSE, AlertDialog.BTN_YES, AlertDialog.BTN_NO, "Bỏ qua").contains(n.desc()));
-            if (dialogShown) {
-                return closeResult(price);
-            }
-            String t = nodes.stream().map(n -> !n.desc().isBlank() ? n.desc() : n.text())
-                    .filter(x -> x != null && x.length() < 200 && RESULT_TEXT.matcher(x).matches()).findFirst().orElse(null);
-            if (t == null) {
-                t = toastText();
-            }
-            if (t != null) {
-                AllureUtils.attachScreenshot("Thông báo nhanh: " + t);
-                AllureUtils.attachText("Thông báo của hệ thống (toast/snackbar)", t);
-                return new Outcome(SUCCESS.matcher(t).matches(), t, price);
-            }
-            if (System.currentTimeMillis() < burstEnd && shots < 5) {
-                AllureUtils.attachScreenshot("Sau khi Xác nhận +" + (++shots));
-            }
-        }
-        AllureUtils.attachScreenshot("Không thấy thông báo kết quả");
-        return new Outcome(false, "", price);
-    }
-
-    private String toastText() {
-        try {
-            var toasts = vn.bsc.automation.core.driver.DriverManager.getDriver()
-                    .findElements(vn.bsc.automation.core.utils.Locators.xpath("//android.widget.Toast"));
-            if (!toasts.isEmpty() && toasts.get(0).getText() != null && !toasts.get(0).getText().isBlank()) {
-                return vn.bsc.automation.core.utils.Locators.nfc(toasts.get(0).getText());
-            }
-        } catch (Exception ignored) {
-            // no toast
-        }
-        return null;
-    }
-
-    private static final Pattern RESULT_TEXT = Pattern.compile("(?is).*(thành công|thất bại|lỗi|không hợp lệ|E_[A-Z_]+).*");
-
-
-    private Outcome closeResult(BigDecimal price) {
-        AlertDialog dialog = new AlertDialog();
-        WaitUtils.condition(() -> dialog.isShown(Duration.ofMillis(300)), Duration.ofSeconds(10));
-        String msg = dialog.getMessage();
-        AllureUtils.attachScreenshot("Kết quả: " + msg);
-        AllureUtils.attachText("Thông báo của hệ thống", msg);
-        for (String b : new String[]{AlertDialog.BTN_CLOSE, "OK", "Bỏ qua"}) {
-            if (dialog.hasButton(b)) {
-                dialog.tapButton(b);
-                break;
-            }
-        }
-        return new Outcome(SUCCESS.matcher(msg).matches(), msg, price);
-    }
-
-    /** Price in a success message ("... giá 7,460.00 thành công!" / "giá 6.98"); null when absent. */
-    public static BigDecimal priceFromMessage(String message) {
-        java.util.regex.Matcher m = java.util.regex.Pattern.compile("giá\\s+([0-9][0-9.,]*)").matcher(message == null ? "" : message);
-        if (!m.find()) {
-            return null;
-        }
-        String t = m.group(1).replaceAll("[.,]$", "");
-        // "7,460.00" (VND, comma = thousands) or "6.98" (x1000)
-        return new BigDecimal(t.replace(",", ""));
+        return results.read(price);
     }
 }

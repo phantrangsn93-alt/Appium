@@ -15,6 +15,13 @@ import vn.bsc.automation.core.driver.DriverManager;
 import java.time.Duration;
 import java.util.List;
 import java.util.function.Supplier;
+import org.openqa.selenium.Dimension;
+import org.openqa.selenium.NoSuchSessionException;
+import org.openqa.selenium.Rectangle;
+import org.openqa.selenium.TimeoutException;
+import org.openqa.selenium.remote.UnreachableBrowserException;
+import org.slf4j.LoggerFactory;
+import vn.bsc.automation.core.config.Platform;
 
 /** Explicit waits only. Thread.sleep is forbidden in this framework. */
 public final class WaitUtils {
@@ -39,7 +46,7 @@ public final class WaitUtils {
     }
 
     public static WebElement visible(By by, Duration timeout) {
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        if (Platform.ios()) {
             return waiter(timeout).until(onScreen(by));
         }
         return waiter(timeout).until(ExpectedConditions.visibilityOfElementLocated(by));
@@ -52,9 +59,9 @@ public final class WaitUtils {
      */
     private static ExpectedCondition<WebElement> onScreen(By by) {
         return d -> {
-            org.openqa.selenium.Dimension w = d.manage().window().getSize();
+            Dimension w = d.manage().window().getSize();
             for (WebElement e : d.findElements(by)) {
-                org.openqa.selenium.Rectangle r = e.getRect();
+                Rectangle r = e.getRect();
                 if (r.getWidth() > 0 && r.getHeight() > 0 && r.getX() < w.getWidth() && r.getY() < w.getHeight()
                         && r.getX() + r.getWidth() > 0 && r.getY() + r.getHeight() > 0) {
                     return e;
@@ -65,7 +72,7 @@ public final class WaitUtils {
     }
 
     public static WebElement clickable(By by) {
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        if (Platform.ios()) {
             ExpectedCondition<WebElement> visible = onScreen(by);
             return waiter(AppConfig.explicitTimeout()).until(d -> {
                 WebElement e = visible.apply(d);
@@ -85,7 +92,7 @@ public final class WaitUtils {
     }
 
     public static boolean waitInvisible(By by, Duration timeout) {
-        if (vn.bsc.automation.core.config.Platform.ios()) {
+        if (Platform.ios()) {
             ExpectedCondition<WebElement> visible = onScreen(by);
             return condition(() -> visible.apply(driver()) == null, timeout);
         }
@@ -104,6 +111,14 @@ public final class WaitUtils {
         return waiter(timeout).until(condition);
     }
 
+    /**
+     * Deliberate fixed pause, ONLY where the app gives no UI signal to wait on (chart / canvas re-draw, wheel
+     * settling, list reload after a filter tap). Prefer {@link #condition} whenever there is something to check.
+     */
+    public static void pause(Duration d) {
+        condition(() -> false, d);
+    }
+
     /** Polls an arbitrary condition (e.g. "price value changed"). */
     public static boolean condition(Supplier<Boolean> check, Duration timeout) {
         try {
@@ -113,7 +128,12 @@ public final class WaitUtils {
                     .ignoring(NoSuchElementException.class)
                     .ignoring(StaleElementReferenceException.class)
                     .until(c -> Boolean.TRUE.equals(c.get()));
-        } catch (Exception e) {
+        } catch (TimeoutException e) {
+            return false; // condition not met in time
+        } catch (NoSuchSessionException | UnreachableBrowserException e) {
+            throw e; // device / Appium session lost: never turn it into a silent "false"
+        } catch (RuntimeException e) {
+            LoggerFactory.getLogger(WaitUtils.class).warn("Wait condition aborted: {}", e.toString());
             return false;
         }
     }

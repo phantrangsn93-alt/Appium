@@ -3,6 +3,18 @@ package vn.bsc.automation.screens;
 import io.qameta.allure.Step;
 import org.openqa.selenium.By;
 import vn.bsc.automation.core.utils.Locators;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
+import org.openqa.selenium.WebElement;
+import vn.bsc.automation.core.driver.DeviceActions;
+import vn.bsc.automation.core.utils.AllureUtils;
+import vn.bsc.automation.core.utils.GestureUtils;
+import vn.bsc.automation.core.utils.ManualInput;
+import vn.bsc.automation.core.utils.UiNode;
+import vn.bsc.automation.core.utils.WaitUtils;
+import vn.bsc.automation.screens.components.OrderConfirmDialog;
 
 /**
  * Money / securities transaction forms opened from the menu (surveyed 06/11/2026, UAT.1-master-UAT5):
@@ -48,12 +60,12 @@ public class TransactionFormScreen extends MenuTargetScreen {
      */
     @Step("Nhập số tiền / khối lượng: {amount}")
     public TransactionFormScreen typeAmount(String amount) {
-        org.openqa.selenium.WebElement field = find(AMOUNT);
-        vn.bsc.automation.core.driver.DeviceActions.tap(field);
-        vn.bsc.automation.core.driver.DeviceActions.typeKeys(field, amount);
+        WebElement field = find(AMOUNT);
+        DeviceActions.tap(field);
+        DeviceActions.typeKeys(field, amount);
         try {
-            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
-                vn.bsc.automation.core.driver.DeviceActions.keyboardDone();
+            if (DeviceActions.isKeyboardShown()) {
+                DeviceActions.keyboardDone();
             }
         } catch (Exception ignored) {
             // keyboard already closed
@@ -75,25 +87,25 @@ public class TransactionFormScreen extends MenuTargetScreen {
         }
         tap(field);
         By close = Locators.classWithDesc("android.widget.Button", "Đóng");
-        java.util.List<vn.bsc.automation.core.utils.UiNode> options = new java.util.ArrayList<>();
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> {
+        List<UiNode> options = new ArrayList<>();
+        WaitUtils.condition(() -> {
             options.clear();
-            if (!isVisible(close, java.time.Duration.ofMillis(300))) {
+            if (!isVisible(close, Duration.ofMillis(300))) {
                 return false;
             }
-            vn.bsc.automation.core.utils.UiNode.snapshot(driver().getPageSource()).stream()
+            UiNode.snapshot(driver().getPageSource()).stream()
                     .filter(n -> n.clickable() && n.desc().contains("\n") && !n.className().endsWith("Button"))
                     .forEach(options::add);
             return !options.isEmpty();
-        }, java.time.Duration.ofSeconds(15));
+        }, Duration.ofSeconds(15));
         if (options.isEmpty()) {
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Không có lựa chọn cho " + label);
+            AllureUtils.attachScreenshot("Không có lựa chọn cho " + label);
             throw new AssertionError("Không có lựa chọn nào cho \"" + label + "\" sau 15 giây");
         }
-        vn.bsc.automation.core.utils.UiNode first = options.stream()
-                .min(java.util.Comparator.comparingInt(vn.bsc.automation.core.utils.UiNode::y)).get();
-        vn.bsc.automation.core.utils.GestureUtils.tap(first.x() + first.width() / 2, first.y() + first.height() / 2);
-        vn.bsc.automation.core.utils.WaitUtils.waitInvisible(close, java.time.Duration.ofSeconds(5));
+        UiNode first = options.stream()
+                .min(Comparator.comparingInt(UiNode::y)).get();
+        GestureUtils.tap(first);
+        WaitUtils.waitInvisible(close, Duration.ofSeconds(5));
         log.info("{}: đã chọn lựa chọn đầu tiên", label); // option holds an account number: not logged
         return first.desc();
     }
@@ -111,29 +123,29 @@ public class TransactionFormScreen extends MenuTargetScreen {
         scrollTo(CONFIRM);
         tap(CONFIRM);
         By summary = Locators.descStartsWith("Xác nhận thông tin");
-        if (isVisible(summary, java.time.Duration.ofSeconds(8))) {
-            vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Xác nhận thông tin - " + title());
+        if (isVisible(summary, Duration.ofSeconds(8))) {
+            AllureUtils.attachScreenshot("Xác nhận thông tin - " + title());
             // Production: the summary sheet itself asks for an OTP ("Lấy OTP" + input). The tester requests and types
             // it and taps "Xác nhận"; the test only waits for the sheet to close.
             By otp = Locators.descMatchesAny("Lấy OTP", "Lấy mã OTP");
-            if (isVisible(otp, java.time.Duration.ofSeconds(2))
-                    || isVisible(vn.bsc.automation.core.utils.Locators.editText(0), java.time.Duration.ofSeconds(1))) {
-                vn.bsc.automation.core.utils.ManualInput.waitForUser("Giao dịch " + title()
+            if (isVisible(otp, Duration.ofSeconds(2))
+                    || isVisible(Locators.editText(0), Duration.ofSeconds(1))) {
+                ManualInput.waitForUser("Giao dịch " + title()
                                 + ": bấm Lấy OTP, nhập OTP rồi bấm Xác nhận trên điện thoại",
-                        () -> !isVisible(summary, java.time.Duration.ofMillis(300)));
+                        () -> !isVisible(summary, Duration.ofMillis(300)));
                 return;
             }
-            java.util.List<vn.bsc.automation.core.utils.UiNode> nodes =
-                    vn.bsc.automation.core.utils.UiNode.snapshot(driver().getPageSource());
-            vn.bsc.automation.core.utils.UiNode btn = nodes.stream()
+            List<UiNode> nodes =
+                    UiNode.snapshot(driver().getPageSource());
+            UiNode btn = nodes.stream()
                     .filter(n -> "Xác nhận".equals(n.desc()) && n.clickable())
-                    .max(java.util.Comparator.comparingInt(vn.bsc.automation.core.utils.UiNode::y))
+                    .max(Comparator.comparingInt(UiNode::y))
                     .orElseThrow(() -> new AssertionError("Nút Xác nhận trên màn Xác nhận thông tin không thấy"));
-            vn.bsc.automation.core.utils.GestureUtils.tap(btn.x() + btn.width() / 2, btn.y() + btn.height() / 2);
+            GestureUtils.tap(btn);
             // PIN step (only when the app asks for it)
-            vn.bsc.automation.screens.components.OrderConfirmDialog pin = new vn.bsc.automation.screens.components.OrderConfirmDialog();
-            if (isVisible(vn.bsc.automation.core.utils.Locators.passwordField(), java.time.Duration.ofSeconds(2))
-                    || isVisible(Locators.descMatchesAny("Lấy OTP", "Lấy mã OTP"), java.time.Duration.ofSeconds(1))) {
+            OrderConfirmDialog pin = new OrderConfirmDialog();
+            if (isVisible(Locators.passwordField(), Duration.ofSeconds(2))
+                    || isVisible(Locators.descMatchesAny("Lấy OTP", "Lấy mã OTP"), Duration.ofSeconds(1))) {
                 pin.enterPinAndConfirm("Giao dịch " + title()); // PIN/OTP typed by the tester when not in .env
             }
         }
@@ -158,7 +170,7 @@ public class TransactionFormScreen extends MenuTargetScreen {
     /** Value of the first of these "label\nvalue" fields present on the form (null when none). */
     public String firstFieldValue(String... labels) {
         for (String l : labels) {
-            if (isVisible(Locators.field(l), java.time.Duration.ofSeconds(1))) {
+            if (isVisible(Locators.field(l), Duration.ofSeconds(1))) {
                 return fieldValue(l);
             }
         }

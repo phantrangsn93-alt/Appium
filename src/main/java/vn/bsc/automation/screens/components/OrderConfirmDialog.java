@@ -9,6 +9,12 @@ import vn.bsc.automation.core.utils.ManualInput;
 import vn.bsc.automation.core.utils.WaitUtils;
 
 import java.time.Duration;
+import java.text.NumberFormat;
+import java.util.Locale;
+import java.util.regex.Pattern;
+import org.openqa.selenium.WebElement;
+import vn.bsc.automation.core.driver.DeviceActions;
+import vn.bsc.automation.core.utils.GestureUtils;
 
 /**
  * Order confirmation dialog (place / modify / cancel): order summary + PIN field + "Xác nhận".
@@ -30,7 +36,7 @@ public class OrderConfirmDialog extends BaseScreen {
             + "|" + Locators.anyForm("Hủy lệnh") + "|" + Locators.anyForm("Sửa lệnh") + ").*");
     private final By confirmButton = Locators.a11y("Xác nhận");
     /** "Nhập mật khẩu đặt lệnh" (PIN method) - a masked EditText. */
-    private final By pinField = vn.bsc.automation.core.utils.Locators.pinField();
+    private final By pinField = Locators.pinField();
 
     @Override
     protected By anchor() {
@@ -72,7 +78,30 @@ public class OrderConfirmDialog extends BaseScreen {
             closeKeyboardWithoutBack();
         }
         tapConfirmWhenEnabled(context);
-        WaitUtils.waitInvisible(title, Duration.ofSeconds(15));
+        if (!WaitUtils.waitInvisible(title, Duration.ofSeconds(15))) {
+            // the result / order book decides; leave evidence that the sheet did not close after "Xác nhận"
+            log.warn("Màn xác nhận vẫn mở 15s sau khi bấm Xác nhận ({}) - lệnh có thể CHƯA được gửi", context);
+            AllureUtils.attachScreenshot("Màn xác nhận chưa đóng - " + context);
+        }
+    }
+
+    /**
+     * SAFETY before PIN / "Xác nhận" of a modify / cancel: the sheet must show the order's symbol and quantity
+     * (e.g. cancel sheet "BÁN | BSI | 100 | 28.70"). Otherwise the sheet is closed and nothing is confirmed.
+     */
+    public void verifyShows(String symbol, long quantity, String context) {
+        String src = nfc(driver().getPageSource());
+        boolean sym = Pattern.compile("(?<![A-Z0-9])" + Pattern.quote(symbol) + "(?![A-Z0-9])")
+                .matcher(src).find();
+        String grouped = NumberFormat.getIntegerInstance(Locale.US).format(quantity);
+        boolean qty = Pattern.compile("(?<![0-9.,])(?:" + Pattern.quote(grouped) + "|"
+                + quantity + ")(?![0-9.,]?[0-9])").matcher(src).find();
+        if (!sym || !qty) {
+            attachEvidence("KHÔNG khớp lệnh - " + context);
+            dismiss();
+            throw new AssertionError("DỪNG AN TOÀN: màn xác nhận không hiển thị " + symbol + " KL " + quantity
+                    + " (" + context + ") - không xác nhận");
+        }
     }
 
     /** OTP step on the sheet: the channel picker is open, or a "Lấy OTP" button is shown. */
@@ -91,7 +120,7 @@ public class OrderConfirmDialog extends BaseScreen {
     }
 
     private static String nfc(String s) {
-        return s == null ? "" : java.text.Normalizer.normalize(s, java.text.Normalizer.Form.NFC).trim();
+        return s == null ? "" : Locators.nfc(s).trim(); // also strips zero-width chars
     }
 
     /** A 6-digit code is in the OTP field and the channel picker is closed. */
@@ -101,7 +130,7 @@ public class OrderConfirmDialog extends BaseScreen {
             return false;
         }
         // OTP field: value="123456" (iOS) / text="123456" (Android)
-        return java.util.regex.Pattern.compile("(?:value|text)=\"[0-9]{6}\"").matcher(src).find();
+        return Pattern.compile("(?:value|text)=\"[0-9]{6}\"").matcher(src).find();
     }
 
     /**
@@ -110,14 +139,14 @@ public class OrderConfirmDialog extends BaseScreen {
      * "•" equals the PIN length; fall back to sendKeys once.
      */
     private void typePin(String pin, String context) {
-        org.openqa.selenium.WebElement field = find(pinField);
-        vn.bsc.automation.core.driver.DeviceActions.tap(field);
-        vn.bsc.automation.core.driver.DeviceActions.typeKeys(field, pin);
-        if (!vn.bsc.automation.core.utils.WaitUtils.condition(() -> pinLength() == pin.length(), Duration.ofSeconds(3))) {
+        WebElement field = find(pinField);
+        DeviceActions.tap(field);
+        DeviceActions.typeKeys(field, pin);
+        if (!WaitUtils.condition(() -> pinLength() == pin.length(), Duration.ofSeconds(3))) {
             log.warn("PIN not registered by key events ({} chars) - retrying with sendKeys", pinLength());
             field = find(pinField);
-            vn.bsc.automation.core.driver.DeviceActions.tap(field);
-            vn.bsc.automation.core.driver.DeviceActions.clear(field);
+            DeviceActions.tap(field);
+            DeviceActions.clear(field);
             field.sendKeys(pin);
         }
         if (pinLength() != pin.length()) {
@@ -141,10 +170,10 @@ public class OrderConfirmDialog extends BaseScreen {
      */
     private void closeKeyboardWithoutBack() {
         try {
-            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
-                vn.bsc.automation.core.driver.DeviceActions.keyboardDone();
+            if (DeviceActions.isKeyboardShown()) {
+                DeviceActions.keyboardDone();
             }
-            if (vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown()) {
+            if (DeviceActions.isKeyboardShown()) {
                 tapCenter(title);
             }
         } catch (Exception e) {
@@ -162,7 +191,7 @@ public class OrderConfirmDialog extends BaseScreen {
                 tap(confirmButton);
                 return;
             }
-            vn.bsc.automation.core.utils.GestureUtils.scrollBy(0.15);
+            GestureUtils.scrollBy(0.15);
         }
         AllureUtils.attachScreenshot("Nút Xác nhận không bấm được - " + context);
         throw new ConfirmDisabledException("Nút 'Xác nhận' không khả dụng sau khi nhập PIN (" + context + ")");
@@ -177,7 +206,7 @@ public class OrderConfirmDialog extends BaseScreen {
         if (isDisplayed(Duration.ofMillis(300)) || overlay.isShown(Duration.ofMillis(300))) {
             return false;
         }
-        vn.bsc.automation.core.utils.WaitUtils.condition(() -> false, Duration.ofMillis(1500));
+        WaitUtils.pause(Duration.ofMillis(1500));
         return !isDisplayed(Duration.ofMillis(300)) && !overlay.isShown(Duration.ofMillis(300));
     }
 
@@ -200,6 +229,6 @@ public class OrderConfirmDialog extends BaseScreen {
             return false; // no PIN field (e.g. PIN remembered for the session) -> tester taps Xác nhận
         }
         String t = getText(pinField);
-        return t != null && !t.isBlank() && !vn.bsc.automation.core.driver.DeviceActions.isKeyboardShown();
+        return t != null && !t.isBlank() && !DeviceActions.isKeyboardShown();
     }
 }

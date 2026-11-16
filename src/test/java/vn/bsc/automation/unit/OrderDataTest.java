@@ -13,6 +13,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.math.BigDecimal;
+import org.testng.Assert;
 
 /** Unit tests (no device): trading-session rules and the order test-data files. */
 public class OrderDataTest {
@@ -71,8 +73,8 @@ public class OrderDataTest {
                     assertThat(PriceSpec.parse(c.triggerPrice())).as(c.id() + " triggerPrice").isNotNull();
                 }
                 case "TRAILING_STOP" -> {
-                    assertThat(new java.math.BigDecimal(c.amplitude())).as(c.id() + " amplitude").isPositive();
-                    assertThat(new java.math.BigDecimal(c.priceStep())).as(c.id() + " priceStep").isPositive();
+                    assertThat(new BigDecimal(c.amplitude())).as(c.id() + " amplitude").isPositive();
+                    assertThat(new BigDecimal(c.priceStep())).as(c.id() + " priceStep").isPositive();
                 }
                 default -> assertThat(c.isConditional()).isFalse();
             }
@@ -81,9 +83,9 @@ public class OrderDataTest {
 
     @Test(groups = "unit")
     public void priceSpecSyntax() {
-        assertThat(PriceSpec.parse("HINT+0.5").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("8.03");
-        assertThat(PriceSpec.parse("hint - 0.5").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("7.03");
-        assertThat(PriceSpec.parse("REF").resolve(new java.math.BigDecimal("7.53"))).isEqualByComparingTo("7.53");
+        assertThat(PriceSpec.parse("HINT+0.5").resolve(new BigDecimal("7.53"))).isEqualByComparingTo("8.03");
+        assertThat(PriceSpec.parse("hint - 0.5").resolve(new BigDecimal("7.53"))).isEqualByComparingTo("7.03");
+        assertThat(PriceSpec.parse("REF").resolve(new BigDecimal("7.53"))).isEqualByComparingTo("7.53");
         assertThat(PriceSpec.parse("7.08").resolve(null)).isEqualByComparingTo("7.08");
         assertThat(PriceSpec.parse("")).isNull();
         org.assertj.core.api.Assertions.assertThatThrownBy(() -> PriceSpec.parse("ABC"))
@@ -118,21 +120,21 @@ public class OrderDataTest {
         }
     }
 
-    @org.testng.annotations.Test
+    @Test
     public void configuredSymbolAndSubAccountOverrideCsv() {
         String[] keys = {"order.symbol.buy.hose", "order.symbol.hose", "order.symbol.buy", "order.subaccount.buy"};
         try {
-            java.util.List<vn.bsc.automation.data.OrderCase> base = vn.bsc.automation.data.OrderCase.load("testdata/orders.csv");
-            vn.bsc.automation.data.OrderCase lo = base.stream().filter(c -> c.id().equals("EX02_LO")).findFirst().orElseThrow();
-            org.testng.Assert.assertEquals(lo.symbol(), "AAA", "no config: CSV symbol");
+            List<OrderCase> base = OrderCase.load("testdata/orders.csv");
+            OrderCase lo = base.stream().filter(c -> c.id().equals("EX02_LO")).findFirst().orElseThrow();
+            Assert.assertEquals(lo.symbol(), "AAA", "no config: CSV symbol");
             System.setProperty("order.symbol.buy", "SSI");
             System.setProperty("order.symbol.hose", "VNM");
-            org.testng.Assert.assertEquals(pick("EX02_LO").symbol(), "VNM", "exchange beats side");
+            Assert.assertEquals(pick("EX02_LO").symbol(), "VNM", "exchange beats side");
             System.setProperty("order.symbol.buy.hose", "FPT");
-            org.testng.Assert.assertEquals(pick("EX02_LO").symbol(), "FPT", "side+exchange beats exchange");
-            org.testng.Assert.assertEquals(pick("PS_LO").symbol(), "41I1GB000", "derivative not affected by stock keys");
+            Assert.assertEquals(pick("EX02_LO").symbol(), "FPT", "side+exchange beats exchange");
+            Assert.assertEquals(pick("PS_LO").symbol(), "41I1GB000", "derivative not affected by stock keys");
             System.setProperty("order.subaccount.buy", "MR90_BSC");
-            org.testng.Assert.assertEquals(pick("EX02_LO").subAccountName(), "MR90_BSC");
+            Assert.assertEquals(pick("EX02_LO").subAccountName(), "MR90_BSC");
         } finally {
             for (String k : keys) {
                 System.clearProperty(k);
@@ -140,8 +142,8 @@ public class OrderDataTest {
         }
     }
 
-    private static vn.bsc.automation.data.OrderCase pick(String id) {
-        return vn.bsc.automation.data.OrderCase.load("testdata/orders.csv").stream()
+    private static OrderCase pick(String id) {
+        return OrderCase.load("testdata/orders.csv").stream()
                 .filter(c -> c.id().equals(id)).findFirst().orElseThrow();
     }
 }

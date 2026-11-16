@@ -47,12 +47,14 @@ const cdata = s => (s || '').replace(/^\s*<!\[CDATA\[/, '').replace(/\]\]>\s*$/,
 
 const MODULES = {
   LoginTest: 'Đăng nhập / Đăng xuất', ExcelLoginTest: 'Đăng nhập (kịch bản Excel)',
-  NavigationTest: 'Điều hướng', PriceBoardTest: 'Bảng giá', OrderFormTest: 'Form đặt lệnh',
-  ConditionalOrderFormTest: 'Lệnh điều kiện (form)', TradingInfoTest: 'Sổ lệnh / Danh mục / Tài sản',
-  SearchTest: 'Tìm kiếm', StockDetailTest: 'Chi tiết mã CK', MenuTest: 'Menu',
-  MenuTransactionTest: 'Giao dịch trong Menu', OrderCleanupTest: 'Công cụ dọn lệnh', OrderDryRunTest: 'Đặt lệnh – dry run (không gửi)',
+  NavigationTest: 'Điều hướng', PriceBoardTest: 'Bảng giá', TradingInfoTest: 'Sổ lệnh / Danh mục / Tài sản',
+  MarketDataTest: 'Thị trường – dữ liệu', MarketFeatureTest: 'Thị trường – chức năng',
+  AccountInfoTest: 'Quản lý tài khoản / Tiện ích / Cài đặt', StatementTest: 'Sao kê',
+  PostTransactionCheckTest: 'Kiểm tra sau giao dịch', IosPlatformTest: 'Framework (unit)',
+  SearchTest: 'Tìm kiếm', StockDetailTest: 'Chi tiết mã CK',
+  MenuTransactionTest: 'Giao dịch trong Menu', OrderCleanupTest: 'Công cụ dọn lệnh',
   ExcelOrderTest: 'Đặt / Sửa / Huỷ lệnh thật (Excel)', LocatorsTest: 'Framework (unit)',
-  OrderDataTest: 'Framework (unit)', OrderBookMatchTest: 'Framework (unit)'
+  OrderDataTest: 'Framework (unit)', OrderBookMatchTest: 'Framework (unit)', OrderResultMessageTest: 'Framework (unit)'
 };
 
 const cases = new Map();
@@ -262,7 +264,7 @@ const children = [
     ['Môi trường', environment], ['Ứng dụng', `com.bsc.mobiletrading – phiên bản ${appVersion}`],
     ['Thiết bị', `${model} – Android ${android} (udid ${udid})`],
     ['Công cụ', `Appium ${appium} + UiAutomator2, Java 17, TestNG 7.11, Allure 2.29`],
-    ['Dữ liệu kiểm thử', 'testdata/orders.csv, order_actions.csv, order.json, login.json, search.json']
+    ['Dữ liệu kiểm thử', 'testdata/orders.csv, order_actions.csv, login.json, search.json']
   ]),
 
   h1('6. Kết quả kiểm thử'),

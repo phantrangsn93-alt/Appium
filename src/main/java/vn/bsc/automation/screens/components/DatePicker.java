@@ -13,6 +13,7 @@ import java.time.Duration;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
+import java.util.Comparator;
 
 /**
  * Date picker dialog of the statement / history screens (surveyed on iOS 14/11/2026):
@@ -45,18 +46,15 @@ public class DatePicker extends BaseScreen {
                 .orElseThrow(() -> new AssertionError("Bộ chọn ngày không mở"));
         // wheel value: content-desc on Android, the "value" attribute on iOS (label empty)
         List<UiNode> cols = nodes.stream()
-                .filter(n -> n.y() < okNode.y() && n.height() > 60 && wheelText(n).matches("(?:Tháng\\s*)?[0-9]{1,4}"))
-                .sorted(java.util.Comparator.comparingInt(UiNode::x)).toList();
+                .filter(n -> n.y() < okNode.y() && n.height() > 60 && n.label().matches("(?:Tháng\\s*)?[0-9]{1,4}"))
+                .sorted(Comparator.comparingInt(UiNode::x)).toList();
         if (cols.size() < 3) {
             throw new AssertionError("Bộ chọn ngày: không đọc được 3 cột Ngày/Tháng/Năm: " + cols);
         }
         return cols.subList(0, 3).stream()
-                .map(n -> new Column(n, Integer.parseInt(wheelText(n).replaceAll("[^0-9]", "")))).toList();
+                .map(n -> new Column(n, Integer.parseInt(n.label().replaceAll("[^0-9]", "")))).toList();
     }
 
-    private static String wheelText(UiNode n) {
-        return n.desc().isBlank() ? (n.text() == null ? "" : n.text().trim()) : n.desc();
-    }
 
     public LocalDate current() {
         List<Column> c = columns();
@@ -92,11 +90,11 @@ public class DatePicker extends BaseScreen {
             }
             UiNode n = c.node();
             int step = n.height() / 3;
-            int x = n.x() + n.width() / 2, y = n.y() + n.height() / 2;
+            int x = n.centerX(), y = n.centerY();
             int moves = Math.min(Math.abs(diff), 3); // up to 3 rows per drag, then re-read
             int dy = step * moves * (diff > 0 ? -1 : 1);
             GestureUtils.swipe(new Point(x, y), new Point(x, y + dy), Duration.ofMillis(350 + 120 * moves));
-            WaitUtils.condition(() -> false, Duration.ofMillis(500)); // wheel settles
+            WaitUtils.pause(Duration.ofMillis(500)); // wheel settles
         }
         Optional<Column> last = Optional.of(columns().get(index));
         throw new AssertionError("Bộ chọn ngày: cột " + index + " không tới được " + target + " (đang " + last.get().value() + ")");

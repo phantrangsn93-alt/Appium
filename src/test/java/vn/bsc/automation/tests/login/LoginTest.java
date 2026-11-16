@@ -27,6 +27,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.util.Set;
+import vn.bsc.automation.flows.LoginFlow;
 
 @Epic("BSC Mobile Trading")
 @Feature("Đăng nhập / Đăng xuất")
@@ -36,7 +38,7 @@ public class LoginTest extends BaseTest {
     private final AlertDialog dialog = new AlertDialog();
 
     /** Tests that need the real account from .env. */
-    private static final java.util.Set<String> NEEDS_ACCOUNT = java.util.Set.of(
+    private static final Set<String> NEEDS_ACCOUNT = Set.of(
             "loginWithValidAccount", "logoutCancelKeepsSession", "logoutConfirmReturnsToLogin");
 
     /**
@@ -56,7 +58,7 @@ public class LoginTest extends BaseTest {
         if (m.getName().startsWith("logout")) {
             return;
         }
-        if (!hasAccount && loginFlow.detectState() == vn.bsc.automation.flows.LoginFlow.AppState.LOGGED_IN) {
+        if (!hasAccount && loginFlow.detectState() == LoginFlow.AppState.LOGGED_IN) {
             throw new SkipException("App is logged in and .env has no account: refusing to log out a session "
                     + "that could not be restored");
         }
@@ -157,7 +159,7 @@ public class LoginTest extends BaseTest {
 
         // the remembered-account login screen still shows the custody code: check the APP STATE instead
         assertThat(loginFlow.detectState()).as("Không còn phiên đăng nhập sau khi đăng xuất")
-                .isNotEqualTo(vn.bsc.automation.flows.LoginFlow.AppState.LOGGED_IN);
+                .isNotEqualTo(LoginFlow.AppState.LOGGED_IN);
         LoginScreen screen = loginFlow.ensureLoggedOut();
         assertThat(screen.isDisplayed()).as("Màn hình đăng nhập").isTrue();
         String remembered = screen.isRememberedMode() ? screen.getRememberedAccount() : screen.getUsernameValue();

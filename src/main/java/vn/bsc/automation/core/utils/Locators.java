@@ -5,6 +5,11 @@ import org.openqa.selenium.By;
 import vn.bsc.automation.core.config.Platform;
 
 import java.text.Normalizer;
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * Locator helpers for a Flutter app driven by UiAutomator2.
@@ -91,7 +96,8 @@ public final class Locators {
      * "Giao dịch qua Tổng đài".
      */
     public static By classWithDescBadged(String className, String label) {
-        String regex = "(?s)(?:[0-9]+.)?" + anyForm(label);
+        // badge before or after the label, "9+" style included (no backslashes: UiSelector strings are not unescaped)
+        String regex = "(?s)(?:[0-9+]+.)?" + anyForm(label) + "(?:.[0-9+]+)?";
         if (Platform.ios()) {
             return typedLabel(className, regex);
         }
@@ -152,7 +158,7 @@ public final class Locators {
         return s == null ? null : ZERO_WIDTH.matcher(Normalizer.normalize(s, Normalizer.Form.NFC)).replaceAll("");
     }
 
-    private static final java.util.regex.Pattern ZERO_WIDTH = java.util.regex.Pattern.compile("[\\u200B\\u200C\\u200D\\uFEFF]");
+    private static final Pattern ZERO_WIDTH = Pattern.compile("[\\u200B\\u200C\\u200D\\uFEFF]");
 
     /**
      * Password / PIN field. Android: EditText password=true. iOS: Flutter exposes obscured fields as a plain
@@ -275,7 +281,7 @@ public final class Locators {
         StringBuilder sb = new StringBuilder();
         nfc.codePoints().forEach(cp -> {
             String c = new String(Character.toChars(cp));
-            java.util.Set<String> variants = encodings(c);
+            Set<String> variants = encodings(c);
             if (variants.size() == 1) {
                 sb.append(literal(c));
             } else {
@@ -290,9 +296,9 @@ public final class Locators {
      * subset (when it composes to a single code point) followed by the remaining marks; plus every order
      * of the remaining marks. E.g. "ậ" -&gt; {ậ, â+U+0323, ạ+U+0302, a+U+0302+U+0323, a+U+0323+U+0302}.
      */
-    static java.util.Set<String> encodings(String c) {
+    static Set<String> encodings(String c) {
         String d = Normalizer.normalize(c, Normalizer.Form.NFD);
-        java.util.Set<String> out = new java.util.LinkedHashSet<>();
+        Set<String> out = new LinkedHashSet<>();
         out.add(c);
         if (d.equals(c)) {
             return out;
@@ -303,7 +309,7 @@ public final class Locators {
         int n = marks.length;
         for (int mask = 0; mask < (1 << n); mask++) {
             StringBuilder in = new StringBuilder(base);
-            java.util.List<Integer> rest = new java.util.ArrayList<>();
+            List<Integer> rest = new ArrayList<>();
             for (int i = 0; i < n; i++) {
                 if ((mask & (1 << i)) != 0) {
                     in.appendCodePoint(marks[i]);
@@ -315,7 +321,7 @@ public final class Locators {
             if (head.codePointCount(0, head.length()) != 1) {
                 continue; // this subset does not compose to a single character
             }
-            for (java.util.List<Integer> perm : permutations(rest)) {
+            for (List<Integer> perm : permutations(rest)) {
                 StringBuilder v = new StringBuilder(head);
                 perm.forEach(v::appendCodePoint);
                 out.add(v.toString());
@@ -324,16 +330,16 @@ public final class Locators {
         return out;
     }
 
-    private static java.util.List<java.util.List<Integer>> permutations(java.util.List<Integer> items) {
-        java.util.List<java.util.List<Integer>> res = new java.util.ArrayList<>();
+    private static List<List<Integer>> permutations(List<Integer> items) {
+        List<List<Integer>> res = new ArrayList<>();
         if (items.isEmpty()) {
-            res.add(new java.util.ArrayList<>());
+            res.add(new ArrayList<>());
             return res;
         }
         for (int i = 0; i < items.size(); i++) {
-            java.util.List<Integer> rest = new java.util.ArrayList<>(items);
+            List<Integer> rest = new ArrayList<>(items);
             Integer first = rest.remove(i);
-            for (java.util.List<Integer> p : permutations(rest)) {
+            for (List<Integer> p : permutations(rest)) {
                 p.add(0, first);
                 res.add(p);
             }

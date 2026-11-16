@@ -2,7 +2,11 @@ package vn.bsc.automation.screens.components;
 
 import org.openqa.selenium.By;
 import vn.bsc.automation.core.base.BaseScreen;
+import vn.bsc.automation.core.driver.DeviceActions;
 import vn.bsc.automation.core.utils.Locators;
+import vn.bsc.automation.core.utils.WaitUtils;
+
+import java.time.Duration;
 
 /** Bottom navigation bar shown on every main screen after login. */
 public class BottomNavBar extends BaseScreen {
@@ -38,6 +42,11 @@ public class BottomNavBar extends BaseScreen {
 
     public void open(Item item) {
         hideKeyboard();
+        if (!WaitUtils.isVisible(item(item), Duration.ofSeconds(1))) {
+            // an auto-focused field (Tìm kiếm) opens the keyboard a moment after the screen loads and covers the bar
+            WaitUtils.condition(DeviceActions::isKeyboardShown, Duration.ofSeconds(2));
+            hideKeyboard();
+        }
         tap(item(item));
     }
 

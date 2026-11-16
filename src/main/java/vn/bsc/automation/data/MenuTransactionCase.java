@@ -3,6 +3,7 @@ package vn.bsc.automation.data;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import vn.bsc.automation.core.config.ConfigReader;
 
 /**
  * One row of {@code testdata/menu_transactions.csv} (rows are executed top -&gt; bottom, like the menu).
@@ -26,7 +27,7 @@ public record MenuTransactionCase(String id, boolean enabled, String menuItem, S
         if (!amount.isBlank()) {
             // menu.tx.amount (money, VND) / menu.tx.stock.qty (securities transfer) override the CSV when set
             String key = "CHUYEN_CHUNG_KHOAN".equals(r.get("menuItem")) ? "menu.tx.stock.qty" : "menu.tx.amount";
-            String o = vn.bsc.automation.core.config.ConfigReader.get(key);
+            String o = ConfigReader.get(key);
             if (o != null && !o.isBlank()) {
                 amount = o.trim();
             }

@@ -13,6 +13,7 @@ import vn.bsc.automation.base.LoggedInBaseTest;
 import vn.bsc.automation.core.config.AppConfig;
 import vn.bsc.automation.data.MenuTransactionCase;
 import vn.bsc.automation.flows.OrderFlow;
+import vn.bsc.automation.flows.OrderResultReader;
 import vn.bsc.automation.flows.OrderFlow.Outcome;
 import vn.bsc.automation.screens.MenuItem;
 import vn.bsc.automation.screens.MenuScreen;
@@ -25,6 +26,10 @@ import vn.bsc.automation.screens.components.AppHeader;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import vn.bsc.automation.core.config.ConfigReader;
+import vn.bsc.automation.core.utils.AllureUtils;
+import vn.bsc.automation.data.TransactionLog;
+import vn.bsc.automation.screens.components.BottomNavBar;
 
 /**
  * REAL money / securities transactions from the right menu, data-driven by testdata/menu_transactions.csv,
@@ -47,8 +52,8 @@ public class MenuTransactionTest extends LoggedInBaseTest {
     @DataProvider(name = "tx")
     public Object[][] tx() {
         // menu.tx.file: e.g. config-prod uses menu_transactions_prod.csv (10,000 VND)
-        String file = vn.bsc.automation.core.config.ConfigReader.get("menu.tx.file", "testdata/menu_transactions.csv");
-        String include = vn.bsc.automation.core.config.ConfigReader.get("menu.tx.include", ".*"); // regex on id
+        String file = ConfigReader.get("menu.tx.file", "testdata/menu_transactions.csv");
+        String include = ConfigReader.get("menu.tx.include", ".*"); // regex on id
         return MenuTransactionCase.load(file).stream().filter(c -> c.id().matches(include))
                 .map(c -> new Object[]{c}).toArray(Object[][]::new);
     }
@@ -63,7 +68,7 @@ public class MenuTransactionTest extends LoggedInBaseTest {
                 dialog.close();
                 continue;
             }
-            if (new vn.bsc.automation.screens.components.BottomNavBar().isDisplayed(Duration.ofSeconds(1))) {
+            if (new BottomNavBar().isDisplayed(Duration.ofSeconds(1))) {
                 new AppHeader().openMenu();
                 return;
             }
@@ -82,7 +87,7 @@ public class MenuTransactionTest extends LoggedInBaseTest {
         }
         TransactionFormScreen form = openForm(c);
         Allure.addAttachment("Form", c.toString());
-        vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Form " + c.id());
+        AllureUtils.attachScreenshot("Form " + c.id());
 
         if ("CHUYEN_TIEN_RA_NGOAI".equals(c.option())) {
             // beneficiary account is a dropdown (not pre-filled): pick the first registered account
@@ -105,9 +110,9 @@ public class MenuTransactionTest extends LoggedInBaseTest {
         Outcome out = resultReader.readResult(null);
         Allure.addAttachment("Kết quả", out.message());
 
-        assertThat(OrderFlow.isSystemError(out.message())).as("[%s] Lỗi hệ thống: %s", c.id(), out.message()).isFalse();
+        assertThat(OrderResultReader.isSystemError(out.message())).as("[%s] Lỗi hệ thống: %s", c.id(), out.message()).isFalse();
         assertThat(out.success()).as("[%s] Giao dịch thành công. Hệ thống trả: '%s'", c.id(), out.message()).isTrue();
-        vn.bsc.automation.data.TransactionLog.succeeded(c, receiver); // statements checked by PostTransactionCheckTest
+        TransactionLog.succeeded(c, receiver); // statements checked by PostTransactionCheckTest
 
         // money leaves the sending account: exactly the amount for an internal transfer, at least the amount otherwise
         if (before != null) {
@@ -129,7 +134,7 @@ public class MenuTransactionTest extends LoggedInBaseTest {
 
     /** Picks the configured sub-account (its number or name) in the first of these fields present on the form. */
     private static void selectConfigured(TransactionFormScreen form, String key, String... labels) {
-        String wanted = vn.bsc.automation.core.config.ConfigReader.get(key);
+        String wanted = ConfigReader.get(key);
         if (wanted == null || wanted.isBlank()) {
             return;
         }

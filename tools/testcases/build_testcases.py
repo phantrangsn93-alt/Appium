@@ -8,7 +8,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
 DATA = json.load(open(os.path.join(ROOT, 'src/test/resources/testdata/market_data.json'), encoding='utf-8'))
-OUT = os.path.join(ROOT, 'Kịch bản kiểm thử tự động - BSC.xlsx')
+OUT = os.path.join(ROOT, 'docs', 'testcases', 'Kịch bản kiểm thử tự động - BSC.xlsx')
 TD = os.path.join(ROOT, 'src/test/resources/testdata')
 ACCOUNT = json.load(open(os.path.join(TD, 'account_screens.json'), encoding='utf-8'))
 
@@ -164,7 +164,7 @@ def statement_sections():
     ]
     yield 'Tài sản (Menu → Quản lý tài khoản → Tài sản)', [
         sk('TC_TS_01', 'Tài sản', 'Mở đúng tab Tài sản', [], 'Chuyển sang Giao dịch – tab Tài sản của tiểu khoản đang chọn',
-           AUTO.replace('CÓ', 'một phần') + 'MenuTest TC_MENU_01 (UAT)'),
+           TODO),
         sk('TC_TS_02', 'Tài sản', 'Thông tin tổng hợp', [], 'Giá trị tài sản ròng (NAV), Lãi/lỗ trong ngày, Trạng thái tiểu khoản, Tổng lãi/lỗ',
            AUTO + 'TC_INFO_03'),
         sk('TC_TS_03', 'Tài sản', 'Cơ cấu tài sản hiển thị đủ', [],

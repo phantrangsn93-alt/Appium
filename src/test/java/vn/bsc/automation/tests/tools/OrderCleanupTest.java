@@ -6,9 +6,10 @@ import org.testng.annotations.Test;
 import vn.bsc.automation.base.LoggedInBaseTest;
 import vn.bsc.automation.core.config.ConfigReader;
 import vn.bsc.automation.screens.OrderBookScreen;
-import vn.bsc.automation.screens.OrderBookScreen.OrderSpec;
+import vn.bsc.automation.data.OrderSpec;
 
 import java.time.LocalTime;
+import org.slf4j.LoggerFactory;
 
 /**
  * Maintenance tool (not part of the regression): cancels conditional test orders left pending, identified by
@@ -33,6 +34,6 @@ public class OrderCleanupTest extends LoggedInBaseTest {
             total += book.cancelConditionalPlacedFrom(new OrderSpec(symbol, buy, qty, null, type.trim(), true),
                     LocalTime.parse(from), 20);
         }
-        org.slf4j.LoggerFactory.getLogger(getClass()).info("Cleanup: đã gửi {} yêu cầu huỷ", total);
+        LoggerFactory.getLogger(getClass()).info("Cleanup: đã gửi {} yêu cầu huỷ", total);
     }
 }

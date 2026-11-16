@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import vn.bsc.automation.core.config.Platform;
 
 /**
  * Lightweight node parsed from a page-source snapshot.
@@ -19,6 +20,22 @@ import java.util.regex.Pattern;
 public record UiNode(String className, String desc, String text, boolean clickable, int x, int y, int width, int height) {
 
     private static final Pattern BOUNDS = Pattern.compile("\\[(\\d+),(\\d+)]\\[(\\d+),(\\d+)]");
+
+    /** Visible text: content-desc / iOS label, else the text / iOS value attribute ("" when none). */
+    public String label() {
+        if (desc != null && !desc.isBlank()) {
+            return desc.trim();
+        }
+        return text == null ? "" : text.trim();
+    }
+
+    public int centerX() {
+        return x + width / 2;
+    }
+
+    public int centerY() {
+        return y + height / 2;
+    }
 
     public static List<UiNode> snapshot(String pageSource) {
         try {
@@ -60,7 +77,7 @@ public record UiNode(String className, String desc, String text, boolean clickab
 
     /**
      * iOS (XCUITest) node: label -&gt; desc, value -&gt; text, type -&gt; Android role (see
-     * {@link vn.bsc.automation.core.config.Platform#androidRole}), x/y/width/height in points (the same unit as
+     * {@link Platform#androidRole}), x/y/width/height in points (the same unit as
      * W3C actions and window size on iOS). Zero-size nodes are skipped; the hit-test based "visible" flag is ignored.
      * clickable ~ accessibility element (iOS has no clickable attribute; tappable Flutter rows are StaticText).
      */
@@ -78,7 +95,7 @@ public record UiNode(String className, String desc, String text, boolean clickab
         }
         // Flutter exposes tappable rows (stock / news rows) as accessible StaticText on iOS: accessible = clickable
         boolean clickable = "true".equals(e.getAttribute("accessible"));
-        return new UiNode(vn.bsc.automation.core.config.Platform.androidRole(type), Locators.nfc(e.getAttribute("label")),
+        return new UiNode(Platform.androidRole(type), Locators.nfc(e.getAttribute("label")),
                 Locators.nfc(e.getAttribute("value")), clickable,
                 x, y, w, h);
     }

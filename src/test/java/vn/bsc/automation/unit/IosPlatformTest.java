@@ -10,6 +10,7 @@ import vn.bsc.automation.core.utils.UiNode;
 
 import java.util.List;
 import java.util.regex.Pattern;
+import java.text.Normalizer;
 
 /** iOS locator generation and page-source parsing - no device needed. */
 public class IosPlatformTest {
@@ -50,7 +51,7 @@ public class IosPlatformTest {
         // the ICU regex accepts both NFC and NFD forms
         String regex = p.substring(p.indexOf("MATCHES \"") + 9, p.length() - 1);
         Pattern re = Pattern.compile(regex);
-        Assert.assertTrue(re.matcher(java.text.Normalizer.normalize("Đăng nhập", java.text.Normalizer.Form.NFD)).matches());
+        Assert.assertTrue(re.matcher(Normalizer.normalize("Đăng nhập", Normalizer.Form.NFD)).matches());
         Assert.assertTrue(re.matcher("Đăng nhập").matches());
     }
 

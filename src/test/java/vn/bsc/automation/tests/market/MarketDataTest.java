@@ -60,7 +60,7 @@ public class MarketDataTest extends LoggedInBaseTest {
             m.chartColouredRatio(chart); // scrolls the chart and its filter row into view
             if (!filter.isEmpty()) {
                 m.selectFilter(filter);
-                WaitUtils.condition(() -> false, Duration.ofSeconds(3)); // chart re-draw (no UI signal to wait on)
+                WaitUtils.pause(Duration.ofSeconds(3)); // chart re-draw (no UI signal to wait on)
             }
             double ratio = m.chartColouredRatio(chart);
             AllureUtils.attachScreenshot("Thị trường - " + label + " - biểu đồ (" + String.format("%.2f%%", ratio * 100) + ")");

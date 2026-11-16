@@ -8,6 +8,7 @@ import vn.bsc.automation.core.config.ConfigReader;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Supplier;
+import vn.bsc.automation.core.driver.DevicePool;
 
 /**
  * Pauses a test until a human performs an action on the device (e.g. typing username/password/PIN),
@@ -57,13 +58,13 @@ public final class ManualInput {
 
     private static void banner(String instruction, Duration timeout) {
         String line = "=".repeat(78);
-        vn.bsc.automation.core.driver.DevicePool.Device d = vn.bsc.automation.core.driver.DevicePool.current();
+        DevicePool.Device d = DevicePool.current();
         String device = d == null ? "" : " - THIẾT BỊ " + d.udid();
         LOG.warn("\n{}\n  ⏸  CẦN THAO TÁC TRÊN ĐIỆN THOẠI{} (tối đa {}s)\n  {}\n{}", line, device, timeout.toSeconds(), instruction, line);
     }
 
     /** Polling interval without Thread.sleep in test code. */
     private static void pause() {
-        WaitUtils.condition(() -> false, Duration.ofMillis(500));
+        WaitUtils.pause(Duration.ofMillis(500));
     }
 }

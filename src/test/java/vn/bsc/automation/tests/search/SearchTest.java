@@ -17,6 +17,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import java.time.Duration;
+import vn.bsc.automation.core.utils.AllureUtils;
 
 @Epic("BSC Mobile Trading")
 @Feature("Tìm kiếm")
@@ -68,8 +70,8 @@ public class SearchTest extends LoggedInBaseTest {
         SearchScreen search = navigator.openSearch();
         search.openCategory(category).searchFresh(keyword);
         search.openCategory(category); // the list refreshes for the selected category
-        List<String> results = search.results(java.time.Duration.ofSeconds(10));
-        vn.bsc.automation.core.utils.AllureUtils.attachScreenshot("Tìm kiếm " + category + " - \"" + keyword + "\"");
+        List<String> results = search.results(Duration.ofSeconds(10));
+        AllureUtils.attachScreenshot("Tìm kiếm " + category + " - \"" + keyword + "\"");
         assertThat(results).as(category + " - \"" + keyword + "\": không có kết quả").isNotEmpty();
         assertThat(results).as(category + " - kết quả chứa \"" + expectContains + "\"")
                 .anySatisfy(r -> assertThat(r).contains(expectContains));
