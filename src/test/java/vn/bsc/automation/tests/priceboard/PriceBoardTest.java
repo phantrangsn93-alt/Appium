@@ -80,46 +80,68 @@ public class PriceBoardTest extends LoggedInBaseTest {
         soft.assertAll();
     }
 
-    /** Every chip of the selector row x every option of its sheet (testdata/market_data.json) -> one test case each. */
+    /**
+     * One row per chip of the selector row (testdata/market_data.json); the test walks every option of that chip
+     * while staying on Bảng giá. Watch-list chip: "watchlist|sub1,sub2" per watch-list.
+     */
     @DataProvider(name = "boardLists")
     public Object[][] boardLists() {
         List<Object[]> rows = new ArrayList<>();
         for (JsonNode sel : TestDataReader.read("market_data.json").get("priceBoard").get("selectors")) {
             int chip = sel.get("chip").asInt();
             String name = sel.get("name").asText();
+            List<String> options = new ArrayList<>();
             if ("watchlist".equals(sel.path("kind").asText())) {
                 sel.get("watchlists").fields().forEachRemaining(e -> {
-                    if (e.getValue().isEmpty()) {
-                        rows.add(new Object[]{chip, name, e.getKey(), ""});
-                    }
-                    e.getValue().forEach(sub -> rows.add(new Object[]{chip, name, e.getKey(), sub.asText()}));
+                    List<String> subs = new ArrayList<>();
+                    e.getValue().forEach(sub -> subs.add(sub.asText()));
+                    options.add(e.getKey() + "|" + String.join(",", subs));
                 });
-            } else if (sel.get("options").isEmpty()) {
-                rows.add(new Object[]{chip, name, "", ""});
             } else {
-                sel.get("options").forEach(o -> rows.add(new Object[]{chip, name, o.asText(), ""}));
+                sel.get("options").forEach(o -> options.add(o.asText()));
             }
+            rows.add(new Object[]{chip, name, options});
         }
         return rows.toArray(new Object[0][]);
     }
 
     @Test(groups = {"regression"}, dataProvider = "boardLists", priority = 1)
     @Severity(SeverityLevel.CRITICAL)
-    @Description("TC_PB_04 - Mỗi bộ chọn / lựa chọn trên Bảng giá phải có dữ liệu (trống => FAIL)")
-    public void everyBoardListHasData(int chip, String selector, String option, String subTab) {
+    @Description("TC_PB_04 - Mỗi bộ chọn / lựa chọn trên Bảng giá phải có dữ liệu (trống => FAIL). Mở Bảng giá 1 lần cho mỗi bộ chọn")
+    public void everyBoardListHasData(int chip, String selector, List<String> options) {
         PriceBoardScreen board = navigator.openPriceBoard();
-        if (chip == 0) {
-            board.selectWatchlist(option);
-        } else {
-            board.selectChip(chip, option);
+        SoftAssertions soft = new SoftAssertions();
+        if (options.isEmpty()) {
+            board.selectChip(chip, "");
+            checkRows(soft, board, selector);
         }
-        if (!subTab.isEmpty()) {
-            board.selectSubTab(subTab);
+        for (String option : options) {
+            try {
+                if (chip == 0) {
+                    String[] p = option.split("\\|", -1);
+                    board.selectWatchlist(p[0]);
+                    if (p[1].isEmpty()) {
+                        checkRows(soft, board, selector + " " + p[0]);
+                    }
+                    for (String sub : p[1].isEmpty() ? new String[0] : p[1].split(",")) {
+                        board.selectSubTab(sub);
+                        checkRows(soft, board, selector + " " + p[0] + " / " + sub);
+                    }
+                } else {
+                    board.selectChip(chip, option); // the sheet closes on every choice: it is re-opened per option
+                    checkRows(soft, board, selector + " " + option);
+                }
+            } catch (AssertionError e) {
+                soft.fail(selector + " " + option + ": " + e.getMessage()); // keep checking the other options
+            }
         }
-        String label = selector + (option.isEmpty() ? "" : " " + option) + (subTab.isEmpty() ? "" : " / " + subTab);
+        soft.assertAll();
+    }
+
+    private static void checkRows(SoftAssertions soft, PriceBoardScreen board, String label) {
         List<UiNode> rows = board.dataRows(Duration.ofSeconds(10));
         AllureUtils.attachScreenshot("Bảng giá - " + label);
-        assertThat(rows).as("Bảng giá - " + label + ": không có dữ liệu").isNotEmpty();
+        soft.assertThat(rows).as("Bảng giá - " + label + ": không có dữ liệu").isNotEmpty();
     }
 
     @Test(groups = {"regression"}, priority = 2)
@@ -127,6 +149,8 @@ public class PriceBoardTest extends LoggedInBaseTest {
     @Description("TC_PB_05 - Icon bảng giá chi tiết: hiển thị bảng có dữ liệu, mỗi dòng Trần >= TC >= Sàn")
     public void detailBoardShowsValidRows() {
         PriceBoardScreen board = navigator.openPriceBoard();
+        // a previous test may have left a non-stock list selected (Trái phiếu / Chứng quyền): use a stock index list
+        board.selectChip(1, "VN30");
         board.openDetailBoard();
         try {
             List<List<String>> rows = board.detailRows(Duration.ofSeconds(10));

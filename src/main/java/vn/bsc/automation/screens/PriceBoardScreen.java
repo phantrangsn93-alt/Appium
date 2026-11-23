@@ -1,6 +1,7 @@
 package vn.bsc.automation.screens;
 
 import org.openqa.selenium.By;
+import org.slf4j.LoggerFactory;
 import vn.bsc.automation.core.base.BaseScreen;
 import vn.bsc.automation.core.utils.Locators;
 import vn.bsc.automation.core.utils.WaitUtils;
@@ -9,6 +10,9 @@ import vn.bsc.automation.data.StockRow;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.LinkedHashSet;
+import java.util.Set;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import io.qameta.allure.Step;
 import java.util.ArrayList;
@@ -17,7 +21,6 @@ import java.util.Comparator;
 import java.util.Optional;
 import org.openqa.selenium.Dimension;
 import org.openqa.selenium.Point;
-import org.openqa.selenium.Rectangle;
 import vn.bsc.automation.core.utils.GestureUtils;
 import vn.bsc.automation.core.utils.UiNode;
 import vn.bsc.automation.screens.components.ContentInspector;
@@ -27,6 +30,9 @@ public class PriceBoardScreen extends BaseScreen {
 
     private final By sortByVolume = Locators.a11y("Khối lượng");
     private final By sortByPrice = Locators.a11y("Giá");
+    private static final Pattern STOCK_ROW =
+            Pattern.compile("^[A-Z0-9]{3,10}\\s*\\n\\s*\\|\\s*\\n\\s*(HOSE|HNX|UPCOM)\\s*\\n");
+
     private final By stockRows = Locators.xpath("//android.view.View[contains(@content-desc,'|') and "
             + "(contains(@content-desc,'HOSE') or contains(@content-desc,'HNX') or contains(@content-desc,'UPCOM'))]");
 
@@ -48,6 +54,10 @@ public class PriceBoardScreen extends BaseScreen {
         WaitUtils.allPresent(stockRows, Duration.ofSeconds(15));
         return findAll(stockRows).stream()
                 .map(this::getDesc)
+                .map(Locators::nfc)
+                // strict row shape "AAA\n|\nHOSE\n...": news rows ("TNG\nHNX | 23/11/2026") and list containers
+                // also contain "|" and an exchange name
+                .filter(d -> STOCK_ROW.matcher(d).find())
                 .map(StockRow::parse)
                 .collect(Collectors.toList());
     }
@@ -88,13 +98,42 @@ public class PriceBoardScreen extends BaseScreen {
      * Trái phiếu) and a chip's label changes with the selection. The row is scrolled to its start, then walked left
      * while collecting labels in order until chip {@code index} is fully on screen, then tapped.
      */
+    /**
+     * Drags the chip row back to its first chip, only as far as needed: stops as soon as a drag no longer moves the
+     * row (already at the start = one probing drag at most). Slow drags: a fast one flings the row.
+     */
+    private void chipRowToStart(int rowY, int y) {
+        Dimension w = driver().manage().window().getSize();
+        String before = chipsOnRow(rowY).stream().map(c -> c.desc() + "@" + c.x()).collect(Collectors.joining("|"));
+        for (int i = 0; i < 3; i++) {
+            dragRow(y, (int) (w.width * 0.25), (int) (w.width * 0.9));
+            String now = chipsOnRow(rowY).stream().map(c -> c.desc() + "@" + c.x()).collect(Collectors.joining("|"));
+            if (now.equals(before)) {
+                return;
+            }
+            before = now;
+        }
+    }
+
+    /** Chip tapped last (index + centre): choosing an option relabels the chip but does not move it. */
+    private int lastChipIndex = -1, lastChipX, lastChipY;
+
     private void tapChip(int index) {
         Dimension w = driver().manage().window().getSize();
         UiNode first = selectorChips().get(0);
         int rowY = first.y(), y = first.y() + first.height() / 2;
-        for (int i = 0; i < 3; i++) { // to the start of the row (slow drags: a fast one flings the row)
-            dragRow(y, (int) (w.width * 0.25), (int) (w.width * 0.9));
+        // same chip as last time and still at the same place (only its label changed): tap it, no horizontal drag
+        if (index == lastChipIndex) {
+            Optional<UiNode> same = chipsOnRow(rowY).stream()
+                    .filter(c -> Math.abs(c.centerX() - lastChipX) < 30 && Math.abs(c.centerY() - lastChipY) < 30
+                            && c.x() >= 0 && c.x() + c.width() < w.width - 20)
+                    .findFirst();
+            if (same.isPresent()) {
+                GestureUtils.tap(same.get());
+                return;
+            }
         }
+        chipRowToStart(rowY, y);
         List<String> order = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             List<UiNode> chips = chipsOnRow(rowY);
@@ -109,6 +148,9 @@ public class PriceBoardScreen extends BaseScreen {
                         .filter(x -> x.desc().equals(label)).findFirst();
                 if (c.isPresent() && c.get().x() + c.get().width() < w.width - 20 && c.get().width() > 60) {
                     GestureUtils.tap(c.get().x() + c.get().width() / 2, y);
+                    lastChipIndex = index;
+                    lastChipX = c.get().centerX();
+                    lastChipY = y;
                     return;
                 }
             }
@@ -145,6 +187,8 @@ public class PriceBoardScreen extends BaseScreen {
 
     /** Label currently shown by chip 0 (watch-list), 1 (index) or 2 (industry). */
     public String selectorLabel(int index) {
+        UiNode first = selectorChips().get(0);
+        chipRowToStart(first.y(), first.centerY()); // a previous test may have left the row scrolled (showed "Chứng quyền" first)
         return selectorChips().get(index).desc();
     }
 
@@ -179,26 +223,40 @@ public class PriceBoardScreen extends BaseScreen {
         By close = Locators.classWithDesc("android.widget.Button", "Đóng");
         WaitUtils.visible(close, Duration.ofSeconds(5));
         By option = Locators.classWithDesc("android.widget.Button", name);
+        String wanted = Locators.nfc(name);
+        Set<String> seen = new LinkedHashSet<>(); // reported when the option is missing
+        // down first, then up; each direction stops as soon as the list no longer moves (end of the list reached)
         for (int dir : new int[]{1, -1}) {
+            String previous = null;
             for (int i = 0; i < 8; i++) {
                 List<UiNode> buttons = UiNode
                         .snapshot(driver().getPageSource()).stream()
-                        .filter(n -> n.className().endsWith("Button") && n.height() > 20 && !"Đóng".equals(n.desc()))
+                        .filter(n -> n.className().endsWith("Button") && n.height() > 20 && !"Đóng".equals(Locators.nfc(n.desc())))
                         .collect(Collectors.toList());
+                // a row cut by the sheet edge is shorter than the others: tap only fully visible rows
+                // (relative to the row height - Android reports px, iOS points)
+                int rowHeight = buttons.stream().mapToInt(UiNode::height).max().orElse(0);
+                buttons.forEach(n -> seen.add(Locators.nfc(n.desc()).trim()));
                 Optional<UiNode> hit = buttons.stream()
-                        .filter(n -> name.equals(n.desc()) && n.height() > 60).findFirst();
+                        .filter(n -> wanted.equals(Locators.nfc(n.desc()).trim()) && n.height() >= rowHeight * 0.8)
+                        .findFirst();
                 if (hit.isPresent()) {
-                    UiNode h = hit.get();
-                    GestureUtils.tap(h);
+                    GestureUtils.tap(hit.get());
                     WaitUtils.waitInvisible(close, Duration.ofSeconds(5));
                     return;
                 }
+                String now = buttons.stream().map(n -> n.desc() + "@" + n.y()).collect(Collectors.joining("|"));
+                if (now.equals(previous)) {
+                    break; // the swipe did not move the list: nothing more in this direction
+                }
+                previous = now;
                 int top = buttons.stream().mapToInt(UiNode::y).min().orElse(1000);
                 int bottom = buttons.stream().mapToInt(n -> n.y() + n.height()).max().orElse(1800);
-                int x = buttons.isEmpty() ? 540 : buttons.get(0).x() + buttons.get(0).width() / 2;
-                int from = dir > 0 ? bottom - 40 : top + 40, to = dir > 0 ? top + 40 : bottom - 40;
-                GestureUtils.swipe(new Point(x, from),
-                        new Point(x, to), Duration.ofMillis(500));
+                int x = buttons.isEmpty() ? 540 : buttons.get(0).centerX();
+                int margin = Math.max(rowHeight / 2, 20);
+                int from = dir > 0 ? bottom - margin : top + margin, to = dir > 0 ? top + margin : bottom - margin;
+                GestureUtils.swipe(new Point(x, from), new Point(x, to), Duration.ofMillis(500));
+                WaitUtils.pause(Duration.ofMillis(300)); // list settles before the next read
             }
         }
         if (isVisible(option, Duration.ofSeconds(1))) {
@@ -206,7 +264,8 @@ public class PriceBoardScreen extends BaseScreen {
             return;
         }
         tap(close);
-        throw new AssertionError("Không có lựa chọn \"" + name + "\" trong danh sách");
+        WaitUtils.waitInvisible(close, Duration.ofSeconds(5)); // the sheet must be gone before the next option
+        throw new AssertionError("Không có lựa chọn \"" + name + "\" trong danh sách. Các lựa chọn đang có: " + seen);
     }
 
     /**
@@ -232,9 +291,26 @@ public class PriceBoardScreen extends BaseScreen {
      */
     @Step("Bảng giá - mở bảng giá chi tiết")
     public void openDetailBoard() {
-        Rectangle menu = find(Locators.a11y("Mở menu di chuyển")).getRect();
+        List<UiNode> nodes = UiNode.snapshot(driver().getPageSource());
+        UiNode menu = nodes.stream().filter(n -> "Mở menu di chuyển".equals(n.desc())).findFirst()
+                .orElseThrow(() -> new AssertionError("Bảng giá: không thấy nút menu trên tiêu đề"));
         int w = driver().manage().window().getSize().getWidth();
-        GestureUtils.tap(menu.getX() - (int) (w * 0.05), menu.getY() + menu.getHeight() / 2);
+        // the detail-board icon is the tappable element right before the menu button on the header row (no label)
+        Optional<UiNode> icon = nodes.stream()
+                .filter(n -> n.clickable() && n != menu && !n.desc().equals(menu.desc())
+                        && Math.abs(n.centerY() - menu.centerY()) < menu.height() / 2
+                        && n.x() + n.width() <= menu.x() + 4 && n.x() > w / 2 && n.width() < w / 5)
+                .max(Comparator.comparingInt(UiNode::x));
+        if (icon.isPresent()) {
+            GestureUtils.tap(icon.get());
+        } else {
+            LoggerFactory.getLogger(PriceBoardScreen.class)
+                    .warn("Icon bảng giá chi tiết không có phần tử riêng - chạm theo vị trí cạnh nút menu");
+            GestureUtils.tap(menu.x() - (int) (w * 0.05), menu.centerY());
+        }
+        if (detailRows(Duration.ofSeconds(8)).isEmpty() && isVisible(Locators.a11y("A-Z"), Duration.ofSeconds(1))) {
+            throw new AssertionError("Không mở được bảng giá chi tiết (vẫn ở Bảng giá sau khi bấm icon cạnh menu)");
+        }
     }
 
     /** Rows of the detailed board: "TC\nTrần\nSàn\n...\nMÃ\n..." (non-clickable, many columns). */

@@ -15,9 +15,12 @@ import vn.bsc.automation.core.config.AppConfig;
 import vn.bsc.automation.core.config.Platform;
 import vn.bsc.automation.core.utils.GestureUtils;
 import vn.bsc.automation.core.utils.Locators;
+import vn.bsc.automation.core.utils.UiNode;
 
 import java.time.Duration;
 import java.util.List;
+import java.util.Comparator;
+import java.util.Optional;
 import java.util.Map;
 import io.appium.java_client.AppiumBy;
 import vn.bsc.automation.core.utils.WaitUtils;
@@ -50,6 +53,32 @@ public final class DeviceActions {
             return AppConfig.appId().equals(a.getCurrentPackage());
         }
         return ((InteractsWithApps) d).queryAppState(AppConfig.appId()) == ApplicationState.RUNNING_IN_FOREGROUND;
+    }
+
+    /**
+     * iOS: bundle id of the app the system shows in front (XCUITest {@code mobile: activeAppInfo}). A system sheet such
+     * as "Nhập mật mã của iPhone cho …" (LocalAuthentication) or a SpringBoard alert is reported as a different bundle
+     * while the app itself is still "running in foreground". Empty when unknown.
+     */
+    public static String iosActiveBundleId() {
+        try {
+            Object info = driver().executeScript("mobile: activeAppInfo");
+            if (info instanceof Map<?, ?> m && m.get("bundleId") != null) {
+                return String.valueOf(m.get("bundleId"));
+            }
+        } catch (RuntimeException e) {
+            // older driver / session busy
+        }
+        return "";
+    }
+
+    /** iOS: true when something other than the app under test is in front (passcode sheet, system alert, other app). */
+    public static boolean iosCoveredBySystemUi() {
+        if (!Platform.ios()) {
+            return false;
+        }
+        String active = iosActiveBundleId();
+        return !active.isEmpty() && !AppConfig.appId().equals(active);
     }
 
     public static void activateApp() {
@@ -144,10 +173,27 @@ public final class DeviceActions {
             tap(back.get(0)); // coordinate tap: element click is ignored on iOS (see tap())
             return;
         }
-        // The app's AppBar "<" (top-left) has no accessibility node on iOS: tap its position; if the screen did not
-        // change (no AppBar, e.g. a bottom sheet keeps the same page source), use the edge-swipe back gesture.
         Dimension s = driver().manage().window().getSize();
         String before = driver().getPageSource();
+        // Chart screen ("Đồ thị", TradingView in a WebView): no AppBar - the way back is a round "←" button at the
+        // BOTTOM-RIGHT (unlabelled, accessible, ~40x40 pt; surveyed 23/11/2026). The top-left tap / edge swipe do
+        // nothing there (the WebView keeps the gesture).
+        if (before.contains("XCUIElementTypeWebView")) {
+            Optional<UiNode> fab = UiNode.snapshot(before).stream()
+                    .filter(n -> n.clickable() && n.desc().isBlank()
+                            && n.width() >= 30 && n.width() <= 60 && Math.abs(n.width() - n.height()) <= 6
+                            && n.x() > s.width * 0.6 && n.y() > s.height * 0.6 && n.y() < s.height * 0.95)
+                    .max(Comparator.comparingInt(UiNode::y));
+            if (fab.isPresent()) {
+                GestureUtils.tap(fab.get());
+                if (WaitUtils.condition(() -> !driver().getPageSource().contains("XCUIElementTypeWebView"),
+                        Duration.ofSeconds(3))) {
+                    return;
+                }
+            }
+        }
+        // The app's AppBar "<" (top-left) has no accessibility node on iOS: tap its position; if the screen did not
+        // change (no AppBar, e.g. a bottom sheet keeps the same page source), use the edge-swipe back gesture.
         GestureUtils.tap((int) (s.width * 0.055), (int) (s.height * 0.103));
         boolean changed = WaitUtils.condition(
                 () -> !driver().getPageSource().equals(before), Duration.ofSeconds(2));

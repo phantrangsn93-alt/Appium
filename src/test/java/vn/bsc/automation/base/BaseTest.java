@@ -9,10 +9,12 @@ import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Optional;
 import org.testng.annotations.Parameters;
 import vn.bsc.automation.core.config.ConfigReader;
+import vn.bsc.automation.core.driver.DeviceActions;
 import vn.bsc.automation.core.driver.DevicePool;
 import vn.bsc.automation.core.driver.DriverFactory;
 import vn.bsc.automation.core.driver.DriverManager;
 import vn.bsc.automation.core.utils.AllureUtils;
+import vn.bsc.automation.core.utils.ManualInput;
 import vn.bsc.automation.flows.LoginFlow;
 import vn.bsc.automation.flows.Navigator;
 
@@ -66,6 +68,21 @@ public abstract class BaseTest {
         }
         loginFlow = new LoginFlow();
         navigator = new Navigator();
+    }
+
+    /**
+     * iOS safety gate before every test: when a system screen covers the app (e.g. "Nhập mật mã của iPhone" after
+     * Face ID was declined), coordinate taps would land on the passcode keypad. Stop and let the tester clear it.
+     */
+    @BeforeMethod(alwaysRun = true)
+    public void requireAppInFront() {
+        if (DriverManager.hasDriver() && DeviceActions.iosCoveredBySystemUi()) {
+            String active = DeviceActions.iosActiveBundleId();
+            LOG.warn("DỪNG AN TOÀN: màn hệ thống ({}) đang che app - không chạm tiếp", active);
+            ManualInput.waitForUser("Một màn của iOS (" + active + ") đang che app, ví dụ hộp nhập mật mã iPhone. "
+                    + "Huỷ hoặc xử lý nó trên điện thoại (KHÔNG để test chạm vào), rồi mở lại app BSC.",
+                    () -> !DeviceActions.iosCoveredBySystemUi());
+        }
     }
 
     @BeforeMethod(alwaysRun = true)

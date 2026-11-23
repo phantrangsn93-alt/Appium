@@ -68,6 +68,10 @@ public final class CapabilityBuilder {
                 .setWdaLocalPort(wdaLocalPort != null ? wdaLocalPort : ConfigReader.getInt("ios.wda.port", 8100))
                 .setWdaLaunchTimeout(Duration.ofSeconds(ConfigReader.getInt("ios.wda.launch.timeout", 180)))
                 .setAutoAcceptAlerts(false)
+                // iOS system alerts (Face ID / notifications / location permission after login) cover the app and
+                // swallow every tap: dismiss them ("Từ chối" / "Không cho phép"). Flutter's own dialogs are not
+                // native alerts and are not affected.
+                .setAutoDismissAlerts(ConfigReader.getBool("ios.auto.dismiss.alerts", true))
                 .setShowXcodeLog(ConfigReader.getBool("ios.show.xcode.log", false));
         o.setCapability("appium:autoGrantPermissions", true);
 

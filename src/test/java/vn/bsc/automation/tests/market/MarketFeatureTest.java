@@ -25,6 +25,7 @@ import vn.bsc.automation.screens.components.ContentInspector;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import org.openqa.selenium.Point;
@@ -141,74 +142,102 @@ public class MarketFeatureTest extends LoggedInBaseTest {
         assertThat(indices).as("Danh sách chỉ số").isNotEmpty();
     }
 
-    @DataProvider(name = "heatmapFilters")
-    public Object[][] heatmapFilters() {
-        List<Object[]> rows = new ArrayList<>();
-        features().get("heatmap").get("filters").forEach(f -> rows.add(new Object[]{f.asText()}));
-        return rows.toArray(new Object[0][]);
-    }
-
-    @Test(groups = {"regression"}, dataProvider = "heatmapFilters")
+    @Test(groups = {"regression"})
     @Severity(SeverityLevel.NORMAL)
-    @Description("TC_MK_04 - Xem bản đồ nhiệt: mở Biểu đồ nhiệt khối ngoại, mỗi sàn có dữ liệu")
-    public void heatmapHasData(String filter) {
+    @Description("TC_MK_04 - Xem bản đồ nhiệt: mở Biểu đồ nhiệt khối ngoại MỘT lần, đổi lần lượt từng sàn, mỗi sàn có dữ liệu")
+    public void heatmapHasData() {
         JsonNode hm = features().get("heatmap");
         MarketScreen m = navigator.openMarket();
         m.openSection(hm.get("button").asText(), false);
         try {
             assertThat(visible(hm.get("title").asText())).as("Màn " + hm.get("title").asText()).isTrue();
-            assertThat(inspector.tapVisible(filter)).as("Bộ lọc " + filter).isTrue();
-            WaitUtils.pause(Duration.ofSeconds(3)); // canvas re-draw
+            SoftAssertions soft = new SoftAssertions();
             int h = DriverManager.getDriver().manage().window().getSize().getHeight();
-            double r = inspector.colouredPixelRatio((int) (h * 0.25), (int) (h * 0.85));
-            AllureUtils.attachScreenshot("Bản đồ nhiệt " + filter + String.format(" (%.2f%%)", r * 100));
-            assertThat(r).as("Bản đồ nhiệt " + filter + " trống").isGreaterThanOrEqualTo(MIN_IMAGE_RATIO);
+            for (JsonNode f : hm.get("filters")) {
+                String filter = f.asText();
+                if (!inspector.tapVisible(filter)) {
+                    soft.fail("Không thấy bộ lọc " + filter);
+                    continue;
+                }
+                WaitUtils.pause(Duration.ofSeconds(3)); // canvas re-draw: no UI signal to wait on
+                double r = inspector.colouredPixelRatio((int) (h * 0.25), (int) (h * 0.85));
+                AllureUtils.attachScreenshot("Bản đồ nhiệt " + filter + String.format(" (%.2f%%)", r * 100));
+                soft.assertThat(r).as("Bản đồ nhiệt " + filter + " trống").isGreaterThanOrEqualTo(MIN_IMAGE_RATIO);
+            }
+            soft.assertAll();
         } finally {
             m.backToHome();
         }
     }
 
-    @DataProvider(name = "listTabs")
-    public Object[][] listTabs() {
+    @DataProvider(name = "listSections")
+    public Object[][] listSections() {
         List<Object[]> rows = new ArrayList<>();
         for (JsonNode l : features().get("lists")) {
-            if (l.get("tabs").isEmpty()) {
-                rows.add(new Object[]{l.get("section").asText(), l.get("title").asText(), ""});
-            }
-            l.get("tabs").forEach(t -> rows.add(new Object[]{l.get("section").asText(), l.get("title").asText(), t.asText()}));
+            List<String> tabs = new ArrayList<>();
+            l.get("tabs").forEach(t -> tabs.add(t.asText()));
+            rows.add(new Object[]{l.get("section").asText(), l.get("title").asText(), tabs});
         }
         return rows.toArray(new Object[0][]);
     }
 
-    @Test(groups = {"regression"}, dataProvider = "listTabs")
+    /**
+     * Opens the section's "Xem thêm" ONCE and walks its tabs there (one screenshot + check per tab), instead of
+     * re-opening the list from the market screen for every tab.
+     */
+    @Test(groups = {"regression"}, dataProvider = "listSections")
     @Severity(SeverityLevel.NORMAL)
-    @Description("TC_MK_05/06/07 - Tin tức / Phân tích / Lịch sự kiện > Xem thêm: mỗi tab có dữ liệu (trống => FAIL)")
-    public void overviewListTabHasData(String section, String title, String tab) {
+    @Description("TC_MK_05/06/07 - Tin tức / Phân tích / Lịch sự kiện > Xem thêm: mở 1 lần, mỗi tab có dữ liệu (trống => FAIL)")
+    public void overviewListTabHasData(String section, String title, List<String> tabs) {
         MarketScreen m = navigator.openMarket();
         m.openSection(section, true);
         try {
             assertThat(visible(title)).as("Màn " + title).isTrue();
-            if (!tab.isEmpty()) {
-                By t = Locators.tab(tab);
-                if (!WaitUtils.isVisible(t, Duration.ofSeconds(2))) {
-                    // scrollable tab bar: reveal tabs on the right
-                    int w = DriverManager.getDriver().manage().window().getSize().getWidth();
-                    UiNode bar = inspector.content().stream().filter(n -> n.desc().contains("trong tổng số")).findFirst().orElseThrow();
-                    GestureUtils.swipe(new Point((int) (w * 0.85), bar.y() + bar.height() / 2),
-                            new Point((int) (w * 0.15), bar.y() + bar.height() / 2), Duration.ofMillis(400));
-                }
-                inspector.content().stream().filter(n -> n.desc().startsWith(tab + "\n") && n.desc().contains("trong tổng số"))
-                        .findFirst().ifPresent(n -> GestureUtils.tap(n));
+            SoftAssertions soft = new SoftAssertions();
+            if (tabs.isEmpty()) {
+                checkListRows(soft, title, title);
             }
-            int below = inspector.content().stream()
-                    .filter(n -> n.desc().contains("trong tổng số") || n.desc().equals(title))
-                    .mapToInt(n -> n.y() + n.height()).max().orElse(0);
-            List<UiNode> rows = inspector.waitForRows(below, LOAD);
-            String label = title + (tab.isEmpty() ? "" : " / " + tab);
-            AllureUtils.attachScreenshot(label);
-            assertThat(rows).as(label + ": không có dữ liệu").isNotEmpty();
+            for (String tab : tabs) {
+                if (!openListTab(tab)) {
+                    soft.fail(title + ": không thấy tab " + tab);
+                    continue;
+                }
+                checkListRows(soft, title, title + " / " + tab);
+            }
+            soft.assertAll();
         } finally {
             m.backToHome();
         }
     }
+
+    /** Taps a tab of the list screen; the tab bar scrolls, so an off-screen tab is revealed by swiping it left. */
+    private boolean openListTab(String tab) {
+        for (int i = 0; i < 3; i++) {
+            Optional<UiNode> t = inspector.content().stream()
+                    .filter(n -> n.desc().startsWith(tab + "\n") && n.desc().contains("trong tổng số"))
+                    .findFirst();
+            int w = DriverManager.getDriver().manage().window().getSize().getWidth();
+            if (t.isPresent() && t.get().x() >= 0 && t.get().x() + t.get().width() <= w + 2) {
+                GestureUtils.tap(t.get());
+                return true;
+            }
+            UiNode bar = inspector.content().stream().filter(n -> n.desc().contains("trong tổng số")).findFirst().orElse(null);
+            if (bar == null) {
+                return false;
+            }
+            GestureUtils.swipe(new Point((int) (w * 0.85), bar.centerY()), new Point((int) (w * 0.15), bar.centerY()),
+                    Duration.ofMillis(400));
+        }
+        return false;
+    }
+
+    private void checkListRows(SoftAssertions soft, String title, String label) {
+        int below = inspector.content().stream()
+                .filter(n -> n.desc().contains("trong tổng số") || n.desc().equals(title))
+                .mapToInt(n -> n.y() + n.height()).max().orElse(0);
+        List<UiNode> rows = inspector.waitForRows(below, LOAD);
+        AllureUtils.attachScreenshot(label);
+        soft.assertThat(rows).as(label + ": không có dữ liệu").isNotEmpty();
+    }
+
 }
