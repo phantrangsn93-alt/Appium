@@ -8,9 +8,9 @@ TX05,true,NOP_RUT_TIEN_CCP,NOP_KY_QUY_CCP,10000,
 TX06,true,NOP_RUT_TIEN_CCP,RUT_KY_QUY_CCP,10000,Hoàn tác TX05
 TX07,true,PHONG_GIAI_TOA_TIEN_BIDV,PHONG_TOA_TIEN,10000,
 TX08,true,PHONG_GIAI_TOA_TIEN_BIDV,GIAI_TOA_TIEN,10000,Hoàn tác TX07
-TX09,false,CHO_VAY,,10000,Cần khảo sát luồng Tạo mới hợp đồng
-TX10,true,CHUYEN_CHUNG_KHOAN,,1,Chuyển 100 CP giữa tiểu khoản (mã mặc định của form)
-TX11,false,DANG_KY_QUYEN_MUA,,10000,Cần có quyền mua khả dụng trên tài khoản
-TX12,false,DANG_KY_MUA_CW_IPO,,10000,Cần có đợt IPO đang mở
-TX13,false,DANG_KY_VOUCHER,,,Cần khảo sát luồng nhận ưu đãi
-TX14,false,XAC_NHAN_LENH_ONLINE,,,Cần có lệnh chờ xác nhận
+TX09,true,CHO_VAY,,10000,Chỉ kiểm tra màn (chưa có HĐ khung - tạo khoản cho vay chờ chủ TK quyết định)
+TX10,true,CHUYEN_CHUNG_KHOAN,,1,Chuyển 1 CP giữa tiểu khoản - mã lấy từ danh sách mã đang có của tiểu khoản chuyển
+TX11,true,DANG_KY_QUYEN_MUA,,10000,Cần có quyền mua khả dụng trên tài khoản
+TX12,true,DANG_KY_MUA_CW_IPO,,10000,Cần có đợt IPO đang mở
+TX13,true,DANG_KY_VOUCHER,,,Cần khảo sát luồng nhận ưu đãi
+TX14,true,XAC_NHAN_LENH_ONLINE,,,Cần có lệnh chờ xác nhận

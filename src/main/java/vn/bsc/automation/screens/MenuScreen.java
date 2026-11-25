@@ -54,6 +54,18 @@ public class MenuScreen extends BaseScreen {
         return isVisible(Locators.descMatchesAny(children), Duration.ofMillis(800));
     }
 
+    /** Expands a group (no-op when already expanded) - e.g. to check a row that must never be tapped. */
+    @Step("Menu > mở nhóm {group}")
+    public void expand(MenuItem.Group group) {
+        for (int i = 0; i < 2 && !isGroupExpanded(group); i++) {
+            By header = scrollFullyIntoView(Locators.a11y(group.label));
+            waitUntilStill(header); // a tap while the list still glides is ignored
+            tap(header);
+            // the accordion animates: wait for a child row before going on (else re-tap once)
+            WaitUtils.condition(() -> isGroupExpanded(group), Duration.ofSeconds(3));
+        }
+    }
+
     /**
      * Opens a menu entry: expands its group if needed, scrolls it fully into view and taps it.
      * Returns nothing - callers continue with the screen object matching {@link MenuItem#kind}
@@ -62,11 +74,8 @@ public class MenuScreen extends BaseScreen {
      */
     @Step("Menu > {item}")
     public void open(MenuItem item) {
-        if (item == MenuItem.TONG_DAI) {
-            throw new IllegalArgumentException("'Tổng đài' places a real phone call - not automated");
-        }
-        if (item.group != null && !isGroupExpanded(item.group)) {
-            tap(scrollFullyIntoView(Locators.a11y(item.group.label)));
+        if (item.group != null) {
+            expand(item.group);
         }
         By target = scrollFullyIntoView(Locators.a11y(item.label));
         waitUntilStill(target); // a tap during the expand animation is ignored by Flutter
@@ -90,14 +99,31 @@ public class MenuScreen extends BaseScreen {
      */
     private By scrollFullyIntoView(By by) {
         Dimension win = driver().manage().window().getSize();
-        for (int i = 0; i < 6; i++) {
-            if (isVisible(by, Duration.ofSeconds(1))) {
-                Rectangle r = find(by).getRect();
-                if (r.getY() + r.getHeight() / 2 < win.getHeight() * 0.85) {
-                    return by;
+        // down first, then up (a previous screen may have left the menu scrolled to its end); at the end of the list
+        // a row may stay low: accept it when its centre is above the Android navigation bar area (92%)
+        for (boolean down : new boolean[]{true, false}) {
+            String previous = null;
+            for (int i = 0; i < 6; i++) {
+                if (isVisible(by, Duration.ofSeconds(1))) {
+                    Rectangle r = find(by).getRect();
+                    int centre = r.getY() + r.getHeight() / 2;
+                    if (centre < win.getHeight() * 0.85) {
+                        return by;
+                    }
+                    String now = driver().getPageSource();
+                    if (now.equals(previous) && centre < win.getHeight() * 0.92) {
+                        return by; // end of the list: cannot bring it higher
+                    }
+                    previous = now;
+                } else {
+                    previous = null;
+                }
+                if (down) {
+                    GestureUtils.scrollDown();
+                } else {
+                    GestureUtils.scrollUp();
                 }
             }
-            GestureUtils.scrollDown();
         }
         throw new AssertionError("Menu entry not reachable: " + by);
     }

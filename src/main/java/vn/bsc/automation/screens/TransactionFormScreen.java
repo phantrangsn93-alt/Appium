@@ -1,5 +1,7 @@
 package vn.bsc.automation.screens;
 
+import java.util.Map;
+
 import io.qameta.allure.Step;
 import org.openqa.selenium.By;
 import vn.bsc.automation.core.utils.Locators;
@@ -7,6 +9,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import org.openqa.selenium.WebElement;
 import vn.bsc.automation.core.driver.DeviceActions;
 import vn.bsc.automation.core.utils.AllureUtils;
@@ -123,7 +126,28 @@ public class TransactionFormScreen extends MenuTargetScreen {
         scrollTo(CONFIRM);
         tap(CONFIRM);
         By summary = Locators.descStartsWith("Xác nhận thông tin");
-        if (isVisible(summary, Duration.ofSeconds(8))) {
+        // The "Chọn kênh nhận mã SMS-OTP" picker opens OVER the summary sheet and hides its title (Android and iOS)
+        WaitUtils.condition(() -> isVisible(summary, Duration.ofMillis(300)) || otpOnScreen(), Duration.ofSeconds(8));
+        if (otpOnScreen()) {
+            AllureUtils.attachScreenshot("Xác nhận thông tin (OTP) - " + title());
+            // Done ONLY when the app shows the result (dialog with "Đóng"), or when the OTP step and the summary
+            // stay gone for 3 s in a row: screen transitions while the tester picks the channel / types the code
+            // briefly show neither, and must not end the wait (that cut the tester off on 25/11/2026).
+            By resultClose = Locators.classWithDesc("android.widget.Button", "Đóng");
+            int[] closedPolls = {0};
+            ManualInput.waitForUser("Giao dịch " + title()
+                            + ": chọn kênh nhận mã, bấm Lấy OTP, nhập OTP rồi bấm Xác nhận trên điện thoại",
+                    () -> {
+                        if (isVisible(resultClose, Duration.ofMillis(200))) {
+                            return true;
+                        }
+                        boolean closed = !otpOnScreen() && !isVisible(summary, Duration.ofMillis(200));
+                        closedPolls[0] = closed ? closedPolls[0] + 1 : 0;
+                        return closedPolls[0] >= 6; // ManualInput polls every 500 ms -> 3 s
+                    });
+            return;
+        }
+        if (isVisible(summary, Duration.ofSeconds(1))) {
             AllureUtils.attachScreenshot("Xác nhận thông tin - " + title());
             // Production: the summary sheet itself asks for an OTP ("Lấy OTP" + input). The tester requests and types
             // it and taps "Xác nhận"; the test only waits for the sheet to close.
@@ -151,17 +175,94 @@ public class TransactionFormScreen extends MenuTargetScreen {
         }
     }
 
+    /** OTP step on screen: channel picker or the "Lấy OTP" input (raw, NFC-normalised page source). */
+    private boolean otpOnScreen() {
+        String src = Locators.nfc(driver().getPageSource());
+        return src.contains("Chọn kênh nhận mã") || src.contains("Lấy OTP") || src.contains("Lấy mã OTP");
+    }
+
     /** Submits the transaction (REAL on the connected environment). */
     @Step("Bấm Xác nhận")
     public void tapConfirm() {
         tap(CONFIRM);
     }
 
-    /** "Số tiền tối đa được chuyển" of the sending (sub-)account; null when the form does not show it. */
-    public Long maxTransferable() {
+    /**
+     * Balance labels the transaction forms use for the money that the transaction takes from (surveyed 25/11/2026):
+     * Chuyển tiền "Số tiền tối đa được chuyển", Nộp tiền phái sinh "Số dư" (sending sub-account), Rút tiền phái sinh
+     * "Tiền mặt khả dụng" (derivative account). The others are the usual names for the same figure.
+     */
+    public static final List<String> BALANCE_LABELS = List.of("Số tiền tối đa được chuyển", "Tiền mặt khả dụng",
+            // Giải toả: the money it can release (before "Số dư khả dụng", which the same form also shows)
+            "Số tiền có thể giải toả", "Số tiền có thể giải tỏa",
+            "Số dư khả dụng", "Số tiền khả dụng", "Số tiền có thể rút", "Số tiền có thể nộp",
+            "Số tiền có thể phong toả", "Số tiền có thể phong tỏa", "Số dư tiền", "Số dư");
+
+    /** Label + amount of the balance the form shows for the source of the money; null when it shows none. */
+    public Map.Entry<String, Long> sourceBalance() {
+        for (String label : BALANCE_LABELS) {
+            String v = valueOrNull(label);
+            if (v != null) {
+                return Map.entry(label, Long.parseLong(v));
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Chuyển chứng khoán: the "Mã CK" field opens a list of the symbols HELD by the sending sub-account (surveyed
+     * 25/11/2026: MR90_BSC -> BSI, TNG). Picks {@code wanted}, or the first held symbol when null; returns it.
+     */
+    @Step("Chọn mã chứng khoán đang có trong tiểu khoản chuyển")
+    public String pickHeldSymbol(String wanted) {
+        UiNode label = UiNode.snapshot(driver().getPageSource()).stream()
+                .filter(n -> n.desc().equals("Mã CK") || n.desc().startsWith("Mã CK\n")).findFirst()
+                .orElseThrow(() -> new AssertionError("Chuyển chứng khoán: không thấy ô Mã CK"));
+        int w = driver().manage().window().getSize().getWidth();
+        GestureUtils.tap((int) (w * 0.9), label.y() + label.height() * 2); // the field row (search icon) under the label
+        List<UiNode> options = new ArrayList<>();
+        WaitUtils.condition(() -> {
+            options.clear();
+            UiNode.snapshot(driver().getPageSource()).stream()
+                    .filter(n -> n.clickable() && n.y() > label.y() && n.desc().matches("[A-Z0-9]{3,10}"))
+                    .forEach(options::add);
+            return !options.isEmpty();
+        }, Duration.ofSeconds(8));
+        if (options.isEmpty()) {
+            throw new AssertionError("Chuyển chứng khoán: tiểu khoản chuyển không có mã chứng khoán nào trong danh sách");
+        }
+        UiNode pick = wanted == null ? options.get(0)
+                : options.stream().filter(o -> o.desc().equals(wanted)).findFirst()
+                .orElseThrow(() -> new AssertionError("Mã " + wanted + " không còn trong danh sách mã của tiểu khoản chuyển"));
+        String symbol = pick.desc();
+        for (int attempt = 0; attempt < 2; attempt++) {
+            WaitUtils.pause(Duration.ofMillis(500)); // the list finishes opening: an earlier tap is swallowed
+            Optional<UiNode> o = UiNode.snapshot(driver().getPageSource()).stream()
+                    .filter(n -> n.clickable() && n.y() > label.y() && symbol.equals(n.desc())).findFirst();
+            if (o.isEmpty()) {
+                break; // list closed: the symbol was taken
+            }
+            GestureUtils.tap(o.get());
+            if (WaitUtils.condition(() -> valueOrNull("Khối lượng có thể chuyển") != null, Duration.ofSeconds(6))) {
+                return symbol;
+            }
+        }
+        if (valueOrNull("Khối lượng có thể chuyển") == null) {
+            throw new AssertionError("Chuyển chứng khoán: đã chọn mã " + symbol + " nhưng không hiện Khối lượng có thể chuyển");
+        }
+        return symbol;
+    }
+
+    /** "Khối lượng có thể chuyển" of the chosen symbol (Chuyển chứng khoán); null when not shown yet. */
+    public Long transferableQuantity() {
+        String v = valueOrNull("Khối lượng có thể chuyển");
+        return v == null ? null : Long.parseLong(v);
+    }
+
+    private String valueOrNull(String label) {
         try {
-            String v = valueBelow("Số tiền tối đa được chuyển").replaceAll("[^0-9]", "");
-            return v.isEmpty() ? null : Long.parseLong(v);
+            String v = valueBelow(label).replaceAll("[^0-9]", "");
+            return v.isEmpty() ? null : v;
         } catch (AssertionError e) {
             return null;
         }

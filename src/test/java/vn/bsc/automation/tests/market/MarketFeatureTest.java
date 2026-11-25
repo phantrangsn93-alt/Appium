@@ -7,7 +7,6 @@ import io.qameta.allure.Feature;
 import io.qameta.allure.Severity;
 import io.qameta.allure.SeverityLevel;
 import org.assertj.core.api.SoftAssertions;
-import org.openqa.selenium.By;
 import org.testng.annotations.DataProvider;
 import org.testng.annotations.Test;
 import vn.bsc.automation.base.LoggedInBaseTest;

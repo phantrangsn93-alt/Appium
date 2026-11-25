@@ -21,6 +21,7 @@
             <class name="vn.bsc.automation.tests.menu.MenuTransactionTest"/>
             <class name="vn.bsc.automation.tests.order.TradingInfoTest"/>
             <class name="vn.bsc.automation.tests.menu.AccountInfoTest"/>
+            <class name="vn.bsc.automation.tests.menu.MenuOtherItemsTest"/>
             <class name="vn.bsc.automation.tests.menu.StatementTest"/>
             <class name="vn.bsc.automation.tests.menu.PostTransactionCheckTest"/>
         </classes>

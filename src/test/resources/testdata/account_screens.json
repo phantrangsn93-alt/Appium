@@ -14,6 +14,18 @@
       "rows": true
     },
     {
+      "id": "TC_UTIL_02",
+      "menuItem": "DO_CHUNG_HUNG_QUA",
+      "title": "Đố chứng hứng quà (trang web nhúng)",
+      "expect": []
+    },
+    {
+      "id": "TC_UTIL_03",
+      "menuItem": "CANH_BAO",
+      "title": "Cảnh báo giá (danh sách cảnh báo đã tạo)",
+      "expect": []
+    },
+    {
       "id": "TC_ACC_07",
       "menuItem": "DU_NO_KY_QUY",
       "title": "Dư nợ ký quỹ (màn \"Nợ ký quỹ\")",
@@ -132,6 +144,27 @@
       "menuItem": "GIAO_DIEN",
       "title": "Giao diện (màn \"Thiết lập giao diện\")",
       "expect": []
+    },
+    {
+      "id": "TC_SET_05",
+      "menuItem": "DOI_NGON_NGU",
+      "title": "Đổi ngôn ngữ (chỉ xem, không đổi)",
+      "expect": [
+        "Tiếng Việt",
+        "English",
+        "한국어",
+        "日本語",
+        "简体中文"
+      ]
+    },
+    {
+      "id": "TC_SET_06",
+      "menuItem": "DOI_CO_CHU",
+      "title": "Đổi cỡ chữ (chỉ xem, không kéo)",
+      "expect": [
+        "Văn bản chính sẽ trông như thế này",
+        "Cỡ chữ"
+      ]
     },
     {
       "id": "TC_SET_03",

@@ -52,8 +52,10 @@ public enum MenuItem {
     DOI_CO_CHU(Group.CAI_DAT, "Đổi cỡ chữ", "Đổi cỡ chữ", Kind.SCREEN),
     NGAN_HANG_THU_HUONG(Group.CAI_DAT, "Danh sách ngân hàng thụ hưởng", "Danh sách ngân hàng thụ hưởng", Kind.SCREEN),
 
-    // ---- Hỗ trợ (all leave the app except "Mạng lưới", which first asks for the LOCATION permission)
-    TONG_DAI(Group.HO_TRO, "Tổng đài", null, Kind.EXTERNAL),           // places a phone call - never tap in tests
+    // ---- Hỗ trợ ("Tổng đài" = in-app hotline list, "Mạng lưới" = in-app map asking for the LOCATION permission,
+    //      the others open a web page through the Android "Mở bằng" chooser)
+    // opens the in-app hotline list (25/11/2026); tapping a NUMBER there places a real call - never tap the numbers
+    TONG_DAI(Group.HO_TRO, "Tổng đài", "Tổng đài", Kind.SCREEN),
     CHAT_TU_VAN_VIEN(Group.HO_TRO, "Chat với tư vấn viên", null, Kind.EXTERNAL),   // Chrome
     HUONG_DAN_SU_DUNG(Group.HO_TRO, "Hướng dẫn sử dụng", null, Kind.EXTERNAL),     // Chrome
     SO_TAY_GIAO_DICH(Group.HO_TRO, "Sổ tay giao dịch", null, Kind.EXTERNAL),       // Chrome
@@ -62,6 +64,7 @@ public enum MenuItem {
     // ---- Top-level rows
     Y_KIEN_DONG_GOP(null, "Ý kiến đóng góp", null, Kind.EXTERNAL),   // Microsoft Forms in Chrome
     THONG_TIN_PHAN_MEM(null, "Thông tin phần mềm", "Version ", Kind.INLINE), // expands "Version <build>" row
+    CHUNG_CHI_QUY(null, "Chứng chỉ quỹ", "Gợi ý cho bạn", Kind.SCREEN), // in-app fund certificate module (CCQ)
     BSC_MTRADER(null, "BSC Mtrader", null, Kind.EXTERNAL);           // Chrome Custom Tab
 
     /** Expandable groups of the menu (tap = expand / collapse). */
